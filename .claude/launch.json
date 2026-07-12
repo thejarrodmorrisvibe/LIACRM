@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lias-crm",
+      "runtimeExecutable": "C:\\Users\\micah\\TEST1\\.node\\node-v24.17.0-win-x64\\npm.cmd",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    }
+  ]
+}

@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/*
+  Lia's CRM — "Blush" design system
+  Soft pink content canvas + deep berry command sidebar.
+  Color is disciplined: pink/purple brand gradient + green/amber/rose status.
+*/
+
+@theme {
+  /* Surfaces */
+  --color-canvas: #fdf2f8;
+  --color-surface: #ffffff;
+  --color-surface-2: #fdf5fa;
+  --color-line: #f6e2ee;
+  --color-line-strong: #efcfe1;
+
+  /* Command sidebar (deep berry — same var names, girly hues) */
+  --color-navy-950: #2a0620;
+  --color-navy-900: #3d0a2e;
+  --color-navy-800: #4f1440;
+  --color-navy-700: #642052;
+  --color-navy-600: #7c3168;
+
+  /* Ink / text (plum-tinted) */
+  --color-ink: #2a1523;
+  --color-ink-soft: #5b3a4e;
+  --color-muted: #8a6b7d;
+  --color-faint: #b79aac;
+
+  /* Brand accents */
+  --color-accent: #ec4899;     /* hot pink */
+  --color-accent-bright: #f472b6;
+  --color-accent-2: #a855f7;   /* purple */
+  --color-accent-soft: #fce7f3;
+
+  /* Status */
+  --color-ok: #10b981;
+  --color-ok-soft: #d6f5e7;
+  --color-warn: #f59e0b;
+  --color-warn-soft: #fdf0d8;
+  --color-bad: #f43f5e;
+  --color-bad-soft: #ffe0e6;
+  --color-info: #a855f7;
+  --color-info-soft: #f3e3fe;
+
+  /* Radii */
+  --radius-xs: 6px;
+  --radius-sm: 9px;
+  --radius-md: 13px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* Shadows — soft, layered, premium */
+  --shadow-card: 0 1px 2px rgba(16, 32, 64, 0.04), 0 6px 20px rgba(16, 32, 64, 0.06);
+  --shadow-pop: 0 8px 28px rgba(16, 32, 64, 0.12), 0 2px 6px rgba(16, 32, 64, 0.08);
+  --shadow-glow: 0 8px 30px rgba(236, 72, 153, 0.30);
+
+  /* Fonts (wired in layout via next/font) */
+  --font-display: var(--font-sora);
+  --font-sans: var(--font-manrope);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display), system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+  /* Tabular figures for money / KPI alignment */
+  .nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  ::selection {
+    background: var(--color-accent);
+    color: #fff;
+  }
+}
+
+/* Brand gradient used on the sidebar logo, primary buttons, KPI accents */
+.brand-gradient {
+  background-image: linear-gradient(120deg, var(--color-accent) 0%, var(--color-accent-2) 100%);
+}
+.brand-text {
+  background-image: linear-gradient(120deg, var(--color-accent-bright) 0%, var(--color-accent-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Subtle starfield/grid atmosphere for the navy sidebar */
+.command-bg {
+  background-color: var(--color-navy-900);
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, rgba(255, 255, 255, 0.18) 0, transparent 100%),
+    radial-gradient(1px 1px at 70% 60%, rgba(255, 255, 255, 0.12) 0, transparent 100%),
+    radial-gradient(1px 1px at 40% 80%, rgba(255, 255, 255, 0.10) 0, transparent 100%),
+    radial-gradient(900px 500px at 100% 0%, rgba(236, 72, 153, 0.22) 0, transparent 60%);
+}
+
+/* Thin custom scrollbars in the app frame */
+.scroll-thin::-webkit-scrollbar { width: 9px; height: 9px; }
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover { background: var(--color-faint); }
+
+/* Page entrance — staggered reveal */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.pop { animation: pop 0.18s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .pop { animation: none; }
+}
