@@ -1,5 +1,4 @@
 import { AppFrame } from "@/components/layout/AppFrame";
-import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 import { ToastProvider } from "@/components/ui/Toast";
 import { listCandidates } from "@/lib/actions/candidates";
 import { currentQuarterAccrued, quarterOf } from "@/lib/commission";
@@ -41,7 +40,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       >
         {children}
       </AppFrame>
-      <AssistantWidget />
     </ToastProvider>
   );
 }
