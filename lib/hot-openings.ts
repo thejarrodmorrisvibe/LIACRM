@@ -43,12 +43,6 @@ export const HOT_OPENINGS: HotState[] = [
         ],
       },
       {
-        client: "Aviocraft", city: "Chandler",
-        openings: [
-          { position: "Electrical Bench Tech", pay: "$28/hr" },
-        ],
-      },
-      {
         client: "Quest Defense", city: "Tucson", note: "Candidate form required for submittal",
         openings: [
           { position: "Electrical Engineer III", pay: "", detail: "Secret Clearance, U.S. Person, 3-5 yrs exp" },
@@ -144,7 +138,7 @@ export const HOT_OPENINGS: HotState[] = [
       {
         client: "AV Inc", city: "Pottstown",
         openings: [
-          { position: "Production Tech II", pay: "$20-$24/hr", detail: "1-2 yrs manufacturing/production exp, electronics/mechanical assembly" },
+          { position: "Production Technician II", pay: "$20-$24/hr", qty: 3, detail: "1-2 yrs manufacturing/production exp (electronics/electro-mechanical assembly). Hand & power tools, soldering, read blueprints. U.S. citizenship required (ITAR)." },
         ],
       },
     ],
