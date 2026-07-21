@@ -1,0 +1,1213 @@
+diff --git a/app/(app)/deleted-jobs/page.tsx b/app/(app)/deleted-jobs/page.tsx
+new file mode 100644
+index 0000000..7e7777c
+--- /dev/null
++++ b/app/(app)/deleted-jobs/page.tsx
+@@ -0,0 +1,10 @@
++import { listDeletedJobs } from "@/lib/actions/jobs";
++import { listCandidates } from "@/lib/actions/candidates";
++import { DeletedJobsClient } from "@/components/jobs/DeletedJobsClient";
++
++export const dynamic = "force-dynamic";
++
++export default async function DeletedJobsPage() {
++  const [jobs, candidates] = await Promise.all([listDeletedJobs(), listCandidates()]);
++  return <DeletedJobsClient jobs={jobs} candidates={candidates} />;
++}
+diff --git a/app/(app)/hot-openings/page.tsx b/app/(app)/hot-openings/page.tsx
+index 2265946..1f3de39 100644
+--- a/app/(app)/hot-openings/page.tsx
++++ b/app/(app)/hot-openings/page.tsx
+@@ -7,8 +7,16 @@ import {
+   HOT_OPENINGS, openingSeats, clientSeats, stateSeats,
+   grandTotalSeats, distinctClientCount, type HotState,
+ } from "@/lib/hot-openings";
++import { listJobs } from "@/lib/actions/jobs";
++import { listCandidates } from "@/lib/actions/candidates";
++import { HotJobsSection } from "@/components/jobs/HotJobsSection";
++
++export const dynamic = "force-dynamic";
++
++export default async function HotOpeningsPage() {
++  const [allJobs, candidates] = await Promise.all([listJobs(), listCandidates()]);
++  const hotJobs = allJobs.filter((j) => j.is_hot);
+ 
+-export default function HotOpeningsPage() {
+   const states: HotState[] = [...HOT_OPENINGS].sort(
+     (a, b) => stateSeats(b) - stateSeats(a) || a.state.localeCompare(b.state),
+   );
+@@ -35,8 +43,26 @@ export default function HotOpeningsPage() {
+         <StatCard label="Hottest State" value={hottest ? stateSeats(hottest) : 0} accent="emerald" icon={<Star width={17} height={17} />} sub={hottest ? `${hottest.state} seats` : "—"} />
+       </div>
+ 
+-      {/* State -> Client -> roles */}
+-      <div className="mt-7 space-y-7">
++      {/* Reqs pinned from the Job Openings tab (jobs.is_hot) */}
++      <section className="mt-8">
++        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
++          <Flame width={18} height={18} className="text-warn" />
++          <h2 className="font-display text-[19px] font-extrabold tracking-tight text-ink">Your Pinned Reqs</h2>
++          <Badge tone="warn">{hotJobs.length}</Badge>
++          <span className="text-[12px] text-faint">
++            From Job Openings · tap a title for the full JD, tap the flame to unpin
++          </span>
++        </div>
++        <HotJobsSection jobs={hotJobs} candidates={candidates} />
++      </section>
++
++      {/* GAL USA HOT List (Master Tracker) — State -> Client -> roles */}
++      <div className="mt-9 mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line-strong pt-7">
++        <Star width={18} height={18} className="text-warn" />
++        <h2 className="font-display text-[19px] font-extrabold tracking-tight text-ink">GAL USA HOT List</h2>
++        <span className="text-[12px] text-faint">Synced from the Master Tracker</span>
++      </div>
++      <div className="space-y-7">
+         {states.map((s) => {
+           const sSeats = stateSeats(s);
+           return (
+diff --git a/components/jobs/DeletedJobsClient.tsx b/components/jobs/DeletedJobsClient.tsx
+new file mode 100644
+index 0000000..3365df8
+--- /dev/null
++++ b/components/jobs/DeletedJobsClient.tsx
+@@ -0,0 +1,130 @@
++"use client";
++
++import { useState, useTransition } from "react";
++import type { Job, Candidate } from "@/lib/types";
++import { restoreJob, purgeJob } from "@/lib/actions/jobs";
++import { PageHeader, PageShell } from "@/components/layout/PageHeader";
++import { Button } from "@/components/ui/Button";
++import { Badge } from "@/components/ui/Badge";
++import { Card } from "@/components/ui/Card";
++import { useToast } from "@/components/ui/Toast";
++import { Trash, MapPin } from "@/components/icons";
++import { parseJobTitle } from "@/lib/job-title";
++import { JobDetail, Openings, payLabel } from "@/components/jobs/JobDetail";
++
++function deletedWhen(iso: string | null): string {
++  if (!iso) return "—";
++  const d = new Date(iso);
++  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
++  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
++  if (days <= 0) return `Today · ${date}`;
++  if (days === 1) return `Yesterday · ${date}`;
++  return `${days} days ago · ${date}`;
++}
++
++/** Recycle bin for reqs. Nothing here shows on Job Openings or Hot Openings. */
++export function DeletedJobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Candidate[] }) {
++  const [pending, start] = useTransition();
++  const toast = useToast();
++  const [viewing, setViewing] = useState<Job | null>(null);
++
++  function restore(j: Job) {
++    start(async () => {
++      await restoreJob(j.id);
++      toast(`Restored "${parseJobTitle(j.position_title).title}"`);
++    });
++  }
++
++  function purge(j: Job) {
++    const { title } = parseJobTitle(j.position_title);
++    if (!confirm(`Permanently delete "${title}" at ${j.client_name}?\n\nThis cannot be undone.`)) return;
++    start(async () => {
++      await purgeJob(j.id);
++      toast("Permanently deleted", "info");
++    });
++  }
++
++  return (
++    <PageShell>
++      <PageHeader
++        title="Deleted Jobs"
++        subtitle={
++          jobs.length === 0
++            ? "Nothing deleted. Reqs you delete land here so you can put them back."
++            : `${jobs.length} deleted ${jobs.length === 1 ? "req" : "reqs"} · restore any of them, or clear them for good`
++        }
++      />
++
++      {jobs.length === 0 ? (
++        <Card className="mt-6 px-6 py-16 text-center">
++          <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent-soft text-accent">
++            <Trash width={22} height={22} />
++          </span>
++          <p className="mt-3 font-display font-bold text-ink">Nothing in here</p>
++          <p className="mt-1 text-[13.5px] text-muted">
++            When you delete a req from Job Openings it moves here instead of disappearing,
++            so an accidental delete is always recoverable.
++          </p>
++        </Card>
++      ) : (
++        <div className="mt-6 space-y-3">
++          {jobs.map((j) => {
++            const { title, openings } = parseJobTitle(j.position_title);
++            return (
++              <Card key={j.id} className="px-4 py-3.5">
++                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
++                  <div className="min-w-0 flex-1">
++                    <div className="flex flex-wrap items-center gap-2">
++                      <button
++                        onClick={() => setViewing(j)}
++                        title="View full job description"
++                        className="rounded-[4px] text-left text-[14.5px] font-semibold text-ink underline-offset-2 transition-colors hover:text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
++                      >
++                        {title}
++                      </button>
++                      <Openings n={openings} />
++                      <Badge tone="neutral">{j.client_name}</Badge>
++                    </div>
++
++                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted">
++                      {j.location && (
++                        <span className="flex items-center gap-1">
++                          <MapPin width={12} height={12} className="shrink-0 text-faint" />
++                          {j.location}
++                        </span>
++                      )}
++                      <span className="font-display font-bold text-accent">{payLabel(j)}</span>
++                      <span className="flex items-center gap-1 text-faint">
++                        <Trash width={12} height={12} />
++                        Deleted {deletedWhen(j.deleted_at)}
++                      </span>
++                    </div>
++
++                    {j.requirements && (
++                      <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-ink-soft">{j.requirements}</p>
++                    )}
++                  </div>
++
++                  <div className="flex shrink-0 items-center gap-2">
++                    <Button size="sm" onClick={() => restore(j)} disabled={pending}>Restore</Button>
++                    <Button size="sm" variant="danger" onClick={() => purge(j)} disabled={pending}>
++                      Delete forever
++                    </Button>
++                  </div>
++                </div>
++              </Card>
++            );
++          })}
++        </div>
++      )}
++
++      {viewing && (
++        <JobDetail
++          job={viewing}
++          candidates={candidates.filter((c) => c.job_id === viewing.id)}
++          onClose={() => setViewing(null)}
++        />
++      )}
++    </PageShell>
++  );
++}
+diff --git a/components/jobs/HotJobsSection.tsx b/components/jobs/HotJobsSection.tsx
+new file mode 100644
+index 0000000..9bdc963
+--- /dev/null
++++ b/components/jobs/HotJobsSection.tsx
+@@ -0,0 +1,163 @@
++"use client";
++
++import { useMemo, useState, useTransition } from "react";
++import type { Job, Candidate } from "@/lib/types";
++import { toggleHot } from "@/lib/actions/jobs";
++import { Card } from "@/components/ui/Card";
++import { Badge } from "@/components/ui/Badge";
++import { Select } from "@/components/ui/Field";
++import { useToast } from "@/components/ui/Toast";
++import { MapPin, Flame } from "@/components/icons";
++import { parseJobTitle } from "@/lib/job-title";
++import { statesOf, OTHER_STATE, locationInState } from "@/lib/us-states";
++import { JobDetail, InlineNotes, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
++
++/**
++ * Reqs pinned to the hot list from the Job Openings tab (jobs.is_hot).
++ * Same behaviour as the Jobs tab: click a title for the full JD, notes show
++ * under the role, and the flame un-pins it.
++ */
++export function HotJobsSection({ jobs, candidates }: { jobs: Job[]; candidates: Candidate[] }) {
++  const [pending, start] = useTransition();
++  const toast = useToast();
++  const [viewing, setViewing] = useState<Job | null>(null);
++  const [stateFilter, setStateFilter] = useState("");
++
++  function unpin(j: Job) {
++    start(async () => {
++      await toggleHot(j.id, false);
++      toast("Removed from Hot Openings", "info");
++    });
++  }
++
++  /** States represented among the pinned reqs, with counts. */
++  const stateOptions = useMemo(() => {
++    const counts = new Map<string, number>();
++    for (const j of jobs) {
++      const sts = statesOf(j.location);
++      if (sts.length === 0) counts.set(OTHER_STATE, (counts.get(OTHER_STATE) ?? 0) + 1);
++      else for (const s of sts) counts.set(s.name, (counts.get(s.name) ?? 0) + 1);
++    }
++    return [...counts.entries()].sort(
++      (a, b) => (a[0] === OTHER_STATE ? 1 : 0) - (b[0] === OTHER_STATE ? 1 : 0) || a[0].localeCompare(b[0]),
++    );
++  }, [jobs]);
++
++  const visible = useMemo(
++    () => (stateFilter ? jobs.filter((j) => locationInState(j.location, stateFilter)) : jobs),
++    [jobs, stateFilter],
++  );
++
++  if (jobs.length === 0) {
++    return (
++      <Card className="mt-4 px-6 py-10 text-center">
++        <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-warn-soft text-warn">
++          <Flame width={20} height={20} />
++        </span>
++        <p className="mt-3 font-display font-bold text-ink">No pinned reqs yet</p>
++        <p className="mt-1 text-[13.5px] text-muted">
++          Open <span className="font-semibold text-ink">Job Openings</span> and tap the flame on any req to pin it here.
++        </p>
++      </Card>
++    );
++  }
++
++  const byClient = new Map<string, Job[]>();
++  for (const j of visible) {
++    if (!byClient.has(j.client_name)) byClient.set(j.client_name, []);
++    byClient.get(j.client_name)!.push(j);
++  }
++  const clients = [...byClient.entries()].sort((a, b) => a[0].localeCompare(b[0]));
++
++  return (
++    <>
++      {stateOptions.length > 1 && (
++        <div className="mt-4 flex flex-wrap items-center gap-3">
++          <Select
++            value={stateFilter}
++            onChange={(e) => setStateFilter(e.target.value)}
++            aria-label="Filter pinned reqs by state"
++            className="w-full sm:w-[230px]"
++          >
++            <option value="">All states ({jobs.length} pinned)</option>
++            {stateOptions.map(([name, n]) => (
++              <option key={name} value={name}>{name} ({n})</option>
++            ))}
++          </Select>
++          {stateFilter && (
++            <button
++              onClick={() => setStateFilter("")}
++              className="rounded-[6px] border border-line px-2 py-0.5 text-[12px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
++            >
++              Clear
++            </button>
++          )}
++        </div>
++      )}
++
++      {clients.length === 0 ? (
++        <Card className="mt-4 px-6 py-10 text-center">
++          <p className="font-display font-bold text-ink">No pinned reqs in {stateFilter}</p>
++          <p className="mt-1 text-[13.5px] text-muted">Pick a different state, or clear the filter.</p>
++        </Card>
++      ) : (
++      <div className="mt-4 space-y-3">
++        {clients.map(([client, list]) => (
++          <Card key={client} className="overflow-hidden">
++            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-line bg-surface-2/40 px-4 py-3">
++              <h3 className="font-display text-[15px] font-bold text-ink">{client}</h3>
++              <Badge tone="neutral">{list.length} {list.length === 1 ? "role" : "roles"}</Badge>
++            </div>
++
++            <ul className="divide-y divide-line">
++              {list.map((j) => {
++                const { title, openings } = parseJobTitle(j.position_title);
++                return (
++                  <li key={j.id} className="flex items-start gap-3 px-4 py-2.5">
++                    <div className="min-w-0 flex-1">
++                      <div className="flex flex-wrap items-center gap-2">
++                        <button
++                          onClick={() => setViewing(j)}
++                          title="View full job description"
++                          className="rounded-[4px] text-left text-[14px] font-semibold text-ink underline-offset-2 transition-colors hover:text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
++                        >
++                          {title}
++                        </button>
++                        <Openings n={openings} />
++                        {j.status !== "Open" && <Badge tone="warn">{j.status}</Badge>}
++                      </div>
++                      {j.location && (
++                        <p className="mt-0.5 flex items-center gap-1 text-[12px] text-muted">
++                          <MapPin width={12} height={12} className="shrink-0 text-faint" />
++                          {j.location}
++                        </p>
++                      )}
++                      {j.requirements && (
++                        <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-ink-soft">{j.requirements}</p>
++                      )}
++                      <InlineNotes key={`${j.id}:${j.notes ?? ""}`} job={j} />
++                    </div>
++
++                    <div className="flex shrink-0 items-center gap-2 pt-0.5">
++                      <span className="font-display text-[14px] font-bold text-accent whitespace-nowrap">{payLabel(j)}</span>
++                      <HotToggle hot onToggle={() => unpin(j)} pending={pending} />
++                    </div>
++                  </li>
++                );
++              })}
++            </ul>
++          </Card>
++        ))}
++      </div>
++      )}
++
++      {viewing && (
++        <JobDetail
++          job={viewing}
++          candidates={candidates.filter((c) => c.job_id === viewing.id)}
++          onClose={() => setViewing(null)}
++        />
++      )}
++    </>
++  );
++}
+diff --git a/components/jobs/JobDetail.tsx b/components/jobs/JobDetail.tsx
+new file mode 100644
+index 0000000..a0e391c
+--- /dev/null
++++ b/components/jobs/JobDetail.tsx
+@@ -0,0 +1,321 @@
++"use client";
++
++import { useState, useTransition, type ReactNode } from "react";
++import type { Job, Candidate, PayType, JobStatus } from "@/lib/types";
++import { JOB_STATUS_TONE, STAGE_LABEL } from "@/lib/types";
++import { updateJob } from "@/lib/actions/jobs";
++import { Button } from "@/components/ui/Button";
++import { Badge } from "@/components/ui/Badge";
++import { Modal } from "@/components/ui/Modal";
++import { Field, Input, Select, Textarea } from "@/components/ui/Field";
++import { useToast } from "@/components/ui/Toast";
++import { Edit, Users, Book } from "@/components/icons";
++import { parseJobTitle } from "@/lib/job-title";
++
++/** Shared by the Jobs tab and the Hot Openings tab so both behave identically. */
++
++/** Small pill showing how many openings a role has (only when > 1). */
++export function Openings({ n }: { n: number }) {
++  if (n <= 1) return null;
++  return <Badge tone="info">×{n} openings</Badge>;
++}
++
++export function payLabel(j: Job): string {
++  const salary = j.pay_type === "salary";
++  const fmt = (n: number) => (salary ? `$${Math.round(n / 1000)}k` : `$${n}`);
++  const { pay_min: min, pay_max: max } = j;
++  if (min != null && max != null) {
++    if (min === max) return `${fmt(min)}${salary ? "/yr" : "/hr"}`;
++    return salary ? `${fmt(min)}–${fmt(max)}/yr` : `$${min}–${max}/hr`;
++  }
++  if (j.pay_amount != null) return salary ? `$${j.pay_amount.toLocaleString()}/yr` : `$${j.pay_amount}/hr`;
++  return "Pay TBD";
++}
++
++export function DetailSection({ label, body, empty }: { label: string; body?: string | null; empty?: string }) {
++  if (!body && !empty) return null;
++  return (
++    <div className="mt-6 border-t border-line pt-4">
++      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</h4>
++      {body ? (
++        <p className="mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink-soft">{body}</p>
++      ) : (
++        <p className="mt-1.5 text-[13px] text-muted">{empty}</p>
++      )}
++    </div>
++  );
++}
++
++/**
++ * The note shown under a role in the list, editable in place. Click the note
++ * (or "Add note") to turn it into a textarea; Ctrl/Cmd+Enter saves, Esc cancels.
++ * Used on both Job Openings and Hot Openings.
++ */
++export function InlineNotes({ job }: { job: Job }) {
++  const [editing, setEditing] = useState(false);
++  const [saved, setSaved] = useState(job.notes ?? "");
++  const [value, setValue] = useState(job.notes ?? "");
++  const [pending, start] = useTransition();
++  const toast = useToast();
++
++  function cancel() {
++    setValue(saved);
++    setEditing(false);
++  }
++
++  function save() {
++    const next = value.trim();
++    start(async () => {
++      await updateJob(job.id, { notes: next });
++      setSaved(next);
++      setEditing(false);
++      toast(next ? "Note saved" : "Note cleared");
++    });
++  }
++
++  if (editing) {
++    return (
++      <div className="mt-1.5">
++        <Textarea
++          rows={2}
++          autoFocus
++          value={value}
++          onChange={(e) => setValue(e.target.value)}
++          onKeyDown={(e) => {
++            if (e.key === "Escape") cancel();
++            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
++          }}
++          placeholder="Req ID, address, state min wage, shift differential, anything to remember…"
++          className="text-[12px]"
++        />
++        <div className="mt-1.5 flex flex-wrap items-center gap-2">
++          <Button size="sm" onClick={save} disabled={pending}>
++            {pending ? "Saving…" : "Save note"}
++          </Button>
++          <Button size="sm" variant="secondary" onClick={cancel}>Cancel</Button>
++          <span className="text-[11px] text-faint">Ctrl/⌘ + Enter to save · Esc to cancel</span>
++        </div>
++      </div>
++    );
++  }
++
++  if (!saved) {
++    return (
++      <button
++        onClick={() => setEditing(true)}
++        className="mt-1 inline-flex items-center gap-1.5 rounded-[5px] text-[11.5px] text-faint transition-colors hover:text-accent"
++      >
++        <Book width={12} height={12} /> Add note
++      </button>
++    );
++  }
++
++  return (
++    <button
++      onClick={() => setEditing(true)}
++      title="Click to edit this note"
++      className="mt-1 flex w-full items-start gap-1.5 rounded-[5px] text-left text-[11.5px] leading-snug text-muted transition-colors hover:text-ink"
++    >
++      <Book width={12} height={12} className="mt-[2px] shrink-0 text-faint" />
++      <span className="line-clamp-2">{saved}</span>
++    </button>
++  );
++}
++
++/** Every editable field of a req. Shared by the popup's edit mode and the Add form. */
++export function JobFields({
++  form, set,
++}: {
++  form: Partial<Job>;
++  set: (patch: Partial<Job>) => void;
++}) {
++  const salary = form.pay_type === "salary";
++  return (
++    <div className="grid gap-4 sm:grid-cols-2">
++      <Field label="Client"><Input value={form.client_name ?? ""} onChange={(e) => set({ client_name: e.target.value })} placeholder="Bombardier" /></Field>
++      <Field label="Position"><Input value={form.position_title ?? ""} onChange={(e) => set({ position_title: e.target.value })} placeholder="A&P Mechanic" /></Field>
++      <Field label="Location"><Input value={form.location ?? ""} onChange={(e) => set({ location: e.target.value })} placeholder="Wichita, KS" /></Field>
++      <Field label="Pay type">
++        <Select value={form.pay_type} onChange={(e) => set({ pay_type: e.target.value as PayType })}>
++          <option value="hourly">Hourly</option><option value="salary">Salary</option>
++        </Select>
++      </Field>
++      <Field label={salary ? "Salary min ($)" : "Rate min ($/hr)"}>
++        <Input type="number" value={form.pay_min ?? ""} onChange={(e) => set({ pay_min: e.target.value === "" ? null : Number(e.target.value) })} placeholder={salary ? "120000" : "30"} />
++      </Field>
++      <Field label={salary ? "Salary max ($)" : "Rate max ($/hr)"}>
++        <Input type="number" value={form.pay_max ?? ""} onChange={(e) => set({ pay_max: e.target.value === "" ? null : Number(e.target.value) })} placeholder={salary ? "140000" : "40"} />
++      </Field>
++      <Field label="Hire type">
++        <Select value={form.job_type ?? ""} onChange={(e) => set({ job_type: e.target.value })}>
++          <option>Contract</option><option>Contract-to-Hire</option><option>Direct Hire</option>
++        </Select>
++      </Field>
++      <Field label="Status">
++        <Select value={form.status} onChange={(e) => set({ status: e.target.value as JobStatus })}>
++          <option>Open</option><option>Filled</option><option>On Hold</option>
++        </Select>
++      </Field>
++      <Field label="Full job description (shown in the popup)" className="sm:col-span-2">
++        <Textarea rows={8} value={form.description ?? ""} onChange={(e) => set({ description: e.target.value })} placeholder="Paste the client's full JD: overview, what you will do, preferred quals, clearance…" />
++      </Field>
++      <Field label="Must-have qualifications (2-line preview in the table)" className="sm:col-span-2">
++        <Textarea rows={2} value={form.requirements ?? ""} onChange={(e) => set({ requirements: e.target.value })} placeholder="Experience, tools, licenses, aircraft types…" />
++      </Field>
++      <Field label="Client note (shown on the group)" className="sm:col-span-2">
++        <Input value={form.client_note ?? ""} onChange={(e) => set({ client_note: e.target.value })} placeholder="Direct hiring only · per diem · US citizenship required" />
++      </Field>
++      <Field label="Notes (shown under the role in the list)" className="sm:col-span-2">
++        <Textarea rows={2} value={form.notes ?? ""} onChange={(e) => set({ notes: e.target.value })} placeholder="Req ID, address, state min wage, shift differential, anything to remember…" />
++      </Field>
++    </div>
++  );
++}
++
++/**
++ * Full job description popup. Opens read-only; the Edit button flips the same
++ * modal into a form covering every field, so a req can be edited from wherever
++ * it was opened (Job Openings or Hot Openings).
++ */
++export function JobDetail({
++  job, candidates, onClose,
++}: {
++  job: Job;
++  candidates: Candidate[];
++  onClose: () => void;
++}) {
++  const [editing, setEditing] = useState(false);
++  const [form, setForm] = useState<Partial<Job>>(job);
++  const [pending, start] = useTransition();
++  const toast = useToast();
++  const set = (patch: Partial<Job>) => setForm((f) => ({ ...f, ...patch }));
++
++  function save() {
++    start(async () => {
++      await updateJob(job.id, form);
++      toast("Opening updated");
++      setEditing(false);
++    });
++  }
++
++  const { title, openings } = parseJobTitle(editing ? (form.position_title ?? "") : job.position_title);
++
++  if (editing) {
++    return (
++      <Modal
++        open
++        onClose={() => setEditing(false)}
++        size="lg"
++        title="Edit Opening"
++        subtitle={`${form.client_name || job.client_name}${form.location ? ` · ${form.location}` : ""}`}
++        footer={
++          <>
++            <Button variant="secondary" onClick={() => { setForm(job); setEditing(false); }}>Cancel</Button>
++            <Button onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
++          </>
++        }
++      >
++        <JobFields form={form} set={set} />
++      </Modal>
++    );
++  }
++
++
++  // Show freshly saved values immediately, before the server round-trip lands.
++  const view = { ...job, ...form } as Job;
++
++  const facts: [string, ReactNode][] = [
++    ["Client", view.client_name],
++    ["Location", view.location || "—"],
++    ["Pay", <span key="p" className="font-display font-bold text-accent">{payLabel(view)}</span>],
++    ["Hire type", view.job_type || "—"],
++    ["Status", <Badge key="s" tone={JOB_STATUS_TONE[view.status]}>{view.status}</Badge>],
++    ["Openings", openings > 1 ? `${openings} seats` : "1 seat"],
++  ];
++
++  return (
++    <Modal
++      open
++      onClose={onClose}
++      size="lg"
++      title={
++        <span className="flex flex-wrap items-center gap-2">
++          {title}
++          <Openings n={openings} />
++        </span>
++      }
++      subtitle={`${view.client_name}${view.location ? ` · ${view.location}` : ""}`}
++      footer={
++        <>
++          <Button variant="secondary" onClick={onClose}>Close</Button>
++          <Button onClick={() => setEditing(true)}><Edit width={16} height={16} /> Edit</Button>
++        </>
++      }
++    >
++      {/* Fact grid */}
++      <dl className="grid grid-cols-2 gap-x-6 gap-y-3.5 sm:grid-cols-3">
++        {facts.map(([label, value]) => (
++          <div key={label}>
++            <dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</dt>
++            <dd className="mt-1 flex items-center text-[13.5px] text-ink">{value}</dd>
++          </div>
++        ))}
++      </dl>
++
++      <DetailSection label="Full job description" body={view.description} empty="No full JD on file yet. Click Edit to add one." />
++      <DetailSection label="Must-have qualifications" body={view.requirements} />
++      <DetailSection label="Client note" body={view.client_note} />
++      <DetailSection label="Notes" body={view.notes} />
++
++      {/* Candidates in play */}
++      <div className="mt-6 border-t border-line pt-4">
++        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-faint">
++          Candidates on this req
++        </h4>
++        {candidates.length === 0 ? (
++          <p className="mt-1.5 text-[13px] text-muted">Nobody submitted to this opening yet.</p>
++        ) : (
++          <ul className="mt-2 flex flex-wrap gap-2">
++            {candidates.map((c) => (
++              <li key={c.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-line bg-surface-2 px-2.5 py-1.5">
++                <Users width={13} height={13} className="text-faint" />
++                <span className="text-[13px] font-medium text-ink">{c.name}</span>
++                <Badge tone="neutral">{STAGE_LABEL[c.stage]}</Badge>
++              </li>
++            ))}
++          </ul>
++        )}
++      </div>
++    </Modal>
++  );
++}
++
++/** Flame toggle — adds/removes a job from the Hot Openings list. */
++export function HotToggle({
++  hot, onToggle, pending,
++}: {
++  hot: boolean;
++  onToggle: () => void;
++  pending?: boolean;
++}) {
++  return (
++    <button
++      onClick={onToggle}
++      disabled={pending}
++      aria-pressed={hot}
++      title={hot ? "Remove from Hot Openings" : "Add to Hot Openings"}
++      aria-label={hot ? "Remove from Hot Openings" : "Add to Hot Openings"}
++      className={
++        "grid h-7 w-7 place-items-center rounded-[7px] transition-colors disabled:opacity-50 " +
++        (hot
++          ? "bg-warn-soft text-warn hover:bg-warn-soft/70"
++          : "text-faint hover:bg-warn-soft hover:text-warn")
++      }
++    >
++      <svg width="15" height="15" viewBox="0 0 24 24" fill={hot ? "currentColor" : "none"}
++        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
++        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
++      </svg>
++    </button>
++  );
++}
+diff --git a/components/jobs/JobsClient.tsx b/components/jobs/JobsClient.tsx
+index c327af6..dfb7330 100644
+--- a/components/jobs/JobsClient.tsx
++++ b/components/jobs/JobsClient.tsx
+@@ -1,38 +1,21 @@
+ "use client";
+ 
+-import { useMemo, useState, useTransition, type ReactNode } from "react";
+-import type { Job, Candidate, PayType, JobStatus } from "@/lib/types";
+-import { JOB_STATUS_TONE, STAGE_LABEL } from "@/lib/types";
+-import { createJob, updateJob, deleteJob } from "@/lib/actions/jobs";
++import { useMemo, useState, useTransition } from "react";
++import type { Job, Candidate } from "@/lib/types";
++import { JOB_STATUS_TONE } from "@/lib/types";
++import { createJob, updateJob, deleteJob, toggleHot } from "@/lib/actions/jobs";
+ import { PageHeader, PageShell } from "@/components/layout/PageHeader";
+ import { Button } from "@/components/ui/Button";
+ import { Badge } from "@/components/ui/Badge";
+ import { Card } from "@/components/ui/Card";
+ import { Modal } from "@/components/ui/Modal";
+-import { Field, Input, Select, Textarea } from "@/components/ui/Field";
++import { Input, Select } from "@/components/ui/Field";
+ import { useToast } from "@/components/ui/Toast";
+ import { Plus, MapPin, Briefcase, Trash, Edit, Users, Search } from "@/components/icons";
+ import { parseJobTitle } from "@/lib/job-title";
+-import { statesOf } from "@/lib/us-states";
++import { statesOf, OTHER_STATE, locationInState } from "@/lib/us-states";
+ import { cn } from "@/lib/utils";
+-
+-/** Small pill showing how many openings a role has (only when > 1). */
+-function Openings({ n }: { n: number }) {
+-  if (n <= 1) return null;
+-  return <Badge tone="info">×{n} openings</Badge>;
+-}
+-
+-function payLabel(j: Job): string {
+-  const salary = j.pay_type === "salary";
+-  const fmt = (n: number) => (salary ? `$${Math.round(n / 1000)}k` : `$${n}`);
+-  const { pay_min: min, pay_max: max } = j;
+-  if (min != null && max != null) {
+-    if (min === max) return `${fmt(min)}${salary ? "/yr" : "/hr"}`;
+-    return salary ? `${fmt(min)}–${fmt(max)}/yr` : `$${min}–${max}/hr`;
+-  }
+-  if (j.pay_amount != null) return salary ? `$${j.pay_amount.toLocaleString()}/yr` : `$${j.pay_amount}/hr`;
+-  return "Pay TBD";
+-}
++import { JobDetail, JobFields, InlineNotes, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
+ 
+ const EMPTY: Partial<Job> = {
+   client_name: "", position_title: "", pay_type: "hourly", pay_min: null, pay_max: null,
+@@ -53,18 +36,33 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+   const [editing, setEditing] = useState<Partial<Job> | null>(null);
+   const [viewing, setViewing] = useState<Job | null>(null);
+   const [query, setQuery] = useState("");
++  const [stateFilter, setStateFilter] = useState("");
+   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+ 
+   const candCount = (jobId: string) => candidates.filter((c) => c.job_id === jobId).length;
+ 
++  /** Every state that currently has reqs, with a count. Multi-site reqs count in each. */
++  const stateOptions = useMemo(() => {
++    const counts = new Map<string, number>();
++    for (const j of jobs) {
++      const sts = statesOf(j.location);
++      if (sts.length === 0) counts.set(OTHER_STATE, (counts.get(OTHER_STATE) ?? 0) + 1);
++      else for (const s of sts) counts.set(s.name, (counts.get(s.name) ?? 0) + 1);
++    }
++    return [...counts.entries()].sort(
++      (a, b) => (a[0] === OTHER_STATE ? 1 : 0) - (b[0] === OTHER_STATE ? 1 : 0) || a[0].localeCompare(b[0]),
++    );
++  }, [jobs]);
++
+   const filtered = useMemo(() => {
+     const q = query.trim().toLowerCase();
+-    if (!q) return jobs;
+-    return jobs.filter((j) =>
+-      [j.client_name, j.position_title, j.location, j.requirements, j.client_note]
+-        .filter(Boolean).join(" ").toLowerCase().includes(q),
+-    );
+-  }, [jobs, query]);
++    return jobs.filter((j) => {
++      if (stateFilter && !locationInState(j.location, stateFilter)) return false;
++      if (!q) return true;
++      return [j.client_name, j.position_title, j.location, j.requirements, j.client_note, j.notes, j.description]
++        .filter(Boolean).join(" ").toLowerCase().includes(q);
++    });
++  }, [jobs, query, stateFilter]);
+ 
+   // Group by state, then by client within each state. A multi-site opening
+   // (location naming two states) shows under each of its states.
+@@ -78,7 +76,7 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+     };
+     for (const j of filtered) {
+       const sts = statesOf(j.location);
+-      if (sts.length === 0) add("Other / Unspecified", j);
++      if (sts.length === 0) add(OTHER_STATE, j);
+       else for (const s of sts) add(s.name, j);
+     }
+     return [...byState.entries()]
+@@ -89,7 +87,7 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+         clientCount: cm.size,
+       }))
+       .sort((a, b) =>
+-        (a.state === "Other / Unspecified" ? 1 : 0) - (b.state === "Other / Unspecified" ? 1 : 0) ||
++        (a.state === OTHER_STATE ? 1 : 0) - (b.state === OTHER_STATE ? 1 : 0) ||
+         a.state.localeCompare(b.state),
+       );
+   }, [filtered]);
+@@ -110,6 +108,13 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+     if (!confirm(`Delete "${j.position_title}" at ${j.client_name}?`)) return;
+     start(async () => { await deleteJob(j.id); toast("Opening deleted", "info"); });
+   }
++  /** Add/remove this req from the Hot Openings list. */
++  function hot(j: Job) {
++    start(async () => {
++      await toggleHot(j.id, !j.is_hot);
++      toast(j.is_hot ? `Removed from Hot Openings` : `Added to Hot Openings`);
++    });
++  }
+   function toggleClient(name: string) {
+     setCollapsed((s) => {
+       const n = new Set(s);
+@@ -126,12 +131,39 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+         action={<Button onClick={() => setEditing({ ...EMPTY })}><Plus width={17} height={17} /> Add Opening</Button>}
+       />
+ 
+-      {/* Search */}
+-      <div className="relative mt-5">
+-        <Search width={17} height={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search position, client, location, requirement…" className="pl-9" />
++      {/* Search + state filter */}
++      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
++        <div className="relative flex-1">
++          <Search width={17} height={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
++          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search position, client, location, requirement…" className="pl-9" />
++        </div>
++        <Select
++          value={stateFilter}
++          onChange={(e) => setStateFilter(e.target.value)}
++          aria-label="Filter by state"
++          className="sm:w-[230px]"
++        >
++          <option value="">All states ({jobs.length} roles)</option>
++          {stateOptions.map(([name, n]) => (
++            <option key={name} value={name}>{name} ({n})</option>
++          ))}
++        </Select>
+       </div>
+ 
++      {stateFilter && (
++        <p className="mt-2.5 flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
++          Showing <span className="font-semibold text-ink">{filtered.length}</span>{" "}
++          {filtered.length === 1 ? "role" : "roles"} in{" "}
++          <span className="font-semibold text-ink">{stateFilter}</span>
++          <button
++            onClick={() => setStateFilter("")}
++            className="rounded-[6px] border border-line px-2 py-0.5 text-[12px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
++          >
++            Clear
++          </button>
++        </p>
++      )}
++
+       {/* State → Client tables */}
+       {stateGroups.length === 0 ? (
+         <Card className="mt-5 px-6 py-16 text-center">
+@@ -173,14 +205,14 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+                 {!isCollapsed && (
+                   <div className="border-t border-line">
+                     {/* Column header (desktop) */}
+-                    <div className="hidden grid-cols-[1fr_160px_110px_130px_64px] gap-4 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint sm:grid">
++                    <div className="hidden grid-cols-[1fr_160px_110px_130px_96px] gap-4 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint sm:grid">
+                       <span>Position</span><span>Location</span><span className="text-right">Pay</span><span>Hire type</span><span />
+                     </div>
+                     <ul className="divide-y divide-line">
+                       {list.map((j) => {
+                         const n = candCount(j.id);
+                         return (
+-                          <li key={j.id} className="grid grid-cols-1 gap-x-4 gap-y-1 px-5 py-3.5 transition-colors hover:bg-surface-2 sm:grid-cols-[1fr_160px_110px_130px_64px] sm:items-center">
++                          <li key={j.id} className="grid grid-cols-1 gap-x-4 gap-y-1 px-5 py-3.5 transition-colors hover:bg-surface-2 sm:grid-cols-[1fr_160px_110px_130px_96px] sm:items-center">
+                             {/* Position + requirements */}
+                             <div className="min-w-0">
+                               <div className="flex items-center gap-2">
+@@ -194,6 +226,7 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+                                 <Openings n={parseJobTitle(j.position_title).openings} />
+                               </div>
+                               {j.requirements && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-ink-soft">{j.requirements}</p>}
++                              <InlineNotes key={`${j.id}:${j.notes ?? ""}`} job={j} />
+                             </div>
+                             {/* Location */}
+                             <div className="flex items-center gap-1 text-[12.5px] text-muted">
+@@ -209,6 +242,7 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+                             </div>
+                             {/* Actions */}
+                             <div className="flex items-center gap-0.5 sm:justify-end">
++                              <HotToggle hot={j.is_hot} onToggle={() => hot(j)} pending={pending} />
+                               <button onClick={() => setEditing(j)} className="grid h-7 w-7 place-items-center rounded-[7px] text-muted hover:bg-accent-soft hover:text-accent" aria-label="Edit"><Edit width={15} height={15} /></button>
+                               <button onClick={() => remove(j)} className="grid h-7 w-7 place-items-center rounded-[7px] text-muted hover:bg-bad-soft hover:text-bad" aria-label="Delete"><Trash width={15} height={15} /></button>
+                             </div>
+@@ -232,7 +266,6 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+           job={viewing}
+           candidates={candidates.filter((c) => c.job_id === viewing.id)}
+           onClose={() => setViewing(null)}
+-          onEdit={() => { setEditing(viewing); setViewing(null); }}
+         />
+       )}
+ 
+@@ -243,97 +276,6 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
+   );
+ }
+ 
+-/** Read-only full job description, opened by clicking a position title. */
+-function JobDetail({
+-  job, candidates, onClose, onEdit,
+-}: {
+-  job: Job;
+-  candidates: Candidate[];
+-  onClose: () => void;
+-  onEdit: () => void;
+-}) {
+-  const { title, openings } = parseJobTitle(job.position_title);
+-
+-  const facts: [string, ReactNode][] = [
+-    ["Client", job.client_name],
+-    ["Location", job.location || "—"],
+-    ["Pay", <span key="p" className="font-display font-bold text-accent">{payLabel(job)}</span>],
+-    ["Hire type", job.job_type || "—"],
+-    ["Status", <Badge key="s" tone={JOB_STATUS_TONE[job.status]}>{job.status}</Badge>],
+-    ["Openings", openings > 1 ? `${openings} seats` : "1 seat"],
+-  ];
+-
+-  return (
+-    <Modal
+-      open
+-      onClose={onClose}
+-      size="lg"
+-      title={
+-        <span className="flex flex-wrap items-center gap-2">
+-          {title}
+-          <Openings n={openings} />
+-        </span>
+-      }
+-      subtitle={`${job.client_name}${job.location ? ` · ${job.location}` : ""}`}
+-      footer={
+-        <>
+-          <Button variant="secondary" onClick={onClose}>Close</Button>
+-          <Button onClick={onEdit}><Edit width={16} height={16} /> Edit</Button>
+-        </>
+-      }
+-    >
+-      {/* Fact grid */}
+-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3.5 sm:grid-cols-3">
+-        {facts.map(([label, value]) => (
+-          <div key={label}>
+-            <dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</dt>
+-            <dd className="mt-1 flex items-center text-[13.5px] text-ink">{value}</dd>
+-          </div>
+-        ))}
+-      </dl>
+-
+-      <DetailSection label="Full job description" body={job.description} empty="No full JD on file yet. Click Edit to add one." />
+-      <DetailSection label="Must-have qualifications" body={job.requirements} />
+-      <DetailSection label="Client note" body={job.client_note} />
+-      <DetailSection label="Internal notes" body={job.notes} />
+-
+-      {/* Candidates in play */}
+-      <div className="mt-6 border-t border-line pt-4">
+-        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-faint">
+-          Candidates on this req
+-        </h4>
+-        {candidates.length === 0 ? (
+-          <p className="mt-1.5 text-[13px] text-muted">Nobody submitted to this opening yet.</p>
+-        ) : (
+-          <ul className="mt-2 flex flex-wrap gap-2">
+-            {candidates.map((c) => (
+-              <li key={c.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-line bg-surface-2 px-2.5 py-1.5">
+-                <Users width={13} height={13} className="text-faint" />
+-                <span className="text-[13px] font-medium text-ink">{c.name}</span>
+-                <Badge tone="neutral">{STAGE_LABEL[c.stage]}</Badge>
+-              </li>
+-            ))}
+-          </ul>
+-        )}
+-      </div>
+-    </Modal>
+-  );
+-}
+-
+-function DetailSection({ label, body, empty }: { label: string; body?: string | null; empty?: string }) {
+-  if (!body && !empty) return null;
+-  return (
+-    <div className="mt-6 border-t border-line pt-4">
+-      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</h4>
+-      {body ? (
+-        <p className="mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink-soft">{body}</p>
+-      ) : (
+-        <p className="mt-1.5 text-[13px] text-muted">{empty}</p>
+-      )}
+-    </div>
+-  );
+-}
+-
+ function JobForm({
+   initial, onClose, onSave, pending,
+ }: {
+@@ -345,7 +287,6 @@ function JobForm({
+   const [form, setForm] = useState<Partial<Job>>(initial);
+   const set = (patch: Partial<Job>) => setForm((f) => ({ ...f, ...patch }));
+   const isNew = !initial.id;
+-  const salary = form.pay_type === "salary";
+ 
+   return (
+     <Modal
+@@ -359,44 +300,7 @@ function JobForm({
+         </>
+       }
+     >
+-      <div className="grid gap-4 sm:grid-cols-2">
+-        <Field label="Client"><Input value={form.client_name ?? ""} onChange={(e) => set({ client_name: e.target.value })} placeholder="Bombardier" /></Field>
+-        <Field label="Position"><Input value={form.position_title ?? ""} onChange={(e) => set({ position_title: e.target.value })} placeholder="A&P Mechanic" /></Field>
+-        <Field label="Location"><Input value={form.location ?? ""} onChange={(e) => set({ location: e.target.value })} placeholder="Wichita, KS" /></Field>
+-        <Field label="Pay type">
+-          <Select value={form.pay_type} onChange={(e) => set({ pay_type: e.target.value as PayType })}>
+-            <option value="hourly">Hourly</option><option value="salary">Salary</option>
+-          </Select>
+-        </Field>
+-        <Field label={salary ? "Salary min ($)" : "Rate min ($/hr)"}>
+-          <Input type="number" value={form.pay_min ?? ""} onChange={(e) => set({ pay_min: e.target.value === "" ? null : Number(e.target.value) })} placeholder={salary ? "120000" : "30"} />
+-        </Field>
+-        <Field label={salary ? "Salary max ($)" : "Rate max ($/hr)"}>
+-          <Input type="number" value={form.pay_max ?? ""} onChange={(e) => set({ pay_max: e.target.value === "" ? null : Number(e.target.value) })} placeholder={salary ? "140000" : "40"} />
+-        </Field>
+-        <Field label="Hire type">
+-          <Select value={form.job_type ?? ""} onChange={(e) => set({ job_type: e.target.value })}>
+-            <option>Contract</option><option>Contract-to-Hire</option><option>Direct Hire</option>
+-          </Select>
+-        </Field>
+-        <Field label="Status">
+-          <Select value={form.status} onChange={(e) => set({ status: e.target.value as JobStatus })}>
+-            <option>Open</option><option>Filled</option><option>On Hold</option>
+-          </Select>
+-        </Field>
+-        <Field label="Full job description (shown in the popup)" className="sm:col-span-2">
+-          <Textarea rows={6} value={form.description ?? ""} onChange={(e) => set({ description: e.target.value })} placeholder="Paste the client's full JD: overview, what you will do, preferred quals, clearance…" />
+-        </Field>
+-        <Field label="Must-have qualifications (2-line preview in the table)" className="sm:col-span-2">
+-          <Textarea rows={2} value={form.requirements ?? ""} onChange={(e) => set({ requirements: e.target.value })} placeholder="Experience, tools, licenses, aircraft types…" />
+-        </Field>
+-        <Field label="Client note (shown on the group)" className="sm:col-span-2">
+-          <Input value={form.client_note ?? ""} onChange={(e) => set({ client_note: e.target.value })} placeholder="Direct hiring only · per diem · US citizenship required" />
+-        </Field>
+-        <Field label="Internal notes" className="sm:col-span-2">
+-          <Textarea rows={2} value={form.notes ?? ""} onChange={(e) => set({ notes: e.target.value })} placeholder="Taxes, shift differential, anything to remember…" />
+-        </Field>
+-      </div>
++      <JobFields form={form} set={set} />
+     </Modal>
+   );
+ }
+diff --git a/components/layout/AppFrame.tsx b/components/layout/AppFrame.tsx
+index 6924385..8cdc074 100644
+--- a/components/layout/AppFrame.tsx
++++ b/components/layout/AppFrame.tsx
+@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
+ import Link from "next/link";
+ import { useState, type ComponentType, type ReactNode, type SVGProps } from "react";
+ import {
+-  Gauge, Kanban, Briefcase, CheckSquare, Dollar, Logout, Menu, Sparkles, Send, Grid, Gift, CalendarClock, Activity, Flame,
++  Gauge, Kanban, Briefcase, CheckSquare, Dollar, Logout, Menu, Sparkles, Send, Grid, Gift, CalendarClock, Activity, Flame, Trash,
+ } from "@/components/icons";
+ 
+ type Item = { href: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement>>; hint: string };
+@@ -20,6 +20,7 @@ const NAV: Item[] = [
+   { href: "/interviews", label: "Interviews", icon: CalendarClock, hint: "Scheduled interviews" },
+   { href: "/jobs", label: "Job Openings", icon: Briefcase, hint: "Open reqs & hot list" },
+   { href: "/hot-openings", label: "Hot Openings", icon: Flame, hint: "Reqs by client & discipline" },
++  { href: "/deleted-jobs", label: "Deleted Jobs", icon: Trash, hint: "Restore removed reqs" },
+   { href: "/tasks", label: "Tasks", icon: CheckSquare, hint: "Tasks & brain dump" },
+   { href: "/referrals", label: "Referrals", icon: Gift, hint: "$250 bonus tracker" },
+   { href: "/commissions", label: "Commissions", icon: Dollar, hint: "Quarterly estimate" },
+diff --git a/lib/actions/jobs.ts b/lib/actions/jobs.ts
+index a44d078..c012c30 100644
+--- a/lib/actions/jobs.ts
++++ b/lib/actions/jobs.ts
+@@ -8,13 +8,15 @@ import type { Job } from "@/lib/types";
+ 
+ function revalidateAll() {
+   revalidatePath("/jobs");
++  revalidatePath("/hot-openings");
++  revalidatePath("/deleted-jobs");
+   revalidatePath("/pipeline");
+   revalidatePath("/roster");
+ }
+ 
+ export async function listJobs(): Promise<Job[]> {
+   if (!isSupabaseConfigured) {
+-    return [...demo.jobs].sort(
++    return [...demo.jobs].filter((j) => !j.deleted_at).sort(
+       (a, b) => Number(b.is_hot) - Number(a.is_hot) || a.client_name.localeCompare(b.client_name),
+     );
+   }
+@@ -22,11 +24,28 @@ export async function listJobs(): Promise<Job[]> {
+   const { data } = await sb
+     .from("jobs")
+     .select("*")
++    .is("deleted_at", null)
+     .order("is_hot", { ascending: false })
+     .order("client_name");
+   return (data ?? []) as Job[];
+ }
+ 
++/** Reqs sent to Deleted Jobs, newest deletion first. */
++export async function listDeletedJobs(): Promise<Job[]> {
++  if (!isSupabaseConfigured) {
++    return [...demo.jobs]
++      .filter((j) => j.deleted_at)
++      .sort((a, b) => (b.deleted_at ?? "").localeCompare(a.deleted_at ?? ""));
++  }
++  const sb = await createClient();
++  const { data } = await sb
++    .from("jobs")
++    .select("*")
++    .not("deleted_at", "is", null)
++    .order("deleted_at", { ascending: false });
++  return (data ?? []) as Job[];
++}
++
+ export async function createJob(input: Partial<Job>): Promise<void> {
+   if (!isSupabaseConfigured) {
+     const now = new Date().toISOString();
+@@ -46,6 +65,7 @@ export async function createJob(input: Partial<Job>): Promise<void> {
+       requirements: input.requirements ?? null,
+       client_note: input.client_note ?? null,
+       notes: input.notes ?? "",
++      deleted_at: null,
+       created_at: now,
+       updated_at: now,
+     });
+@@ -76,7 +96,38 @@ export async function toggleHot(id: string, is_hot: boolean): Promise<void> {
+   return updateJob(id, { is_hot });
+ }
+ 
++/**
++ * Soft delete — moves the req to Deleted Jobs so it can be restored. Also drops
++ * it off the hot list so a deleted req can't linger on Hot Openings.
++ */
+ export async function deleteJob(id: string): Promise<void> {
++  const now = new Date().toISOString();
++  if (!isSupabaseConfigured) {
++    const j = demo.jobs.find((x) => x.id === id);
++    if (j) { j.deleted_at = now; j.is_hot = false; }
++    revalidateAll();
++    return;
++  }
++  const sb = await createClient();
++  await sb.from("jobs").update({ deleted_at: now, is_hot: false }).eq("id", id);
++  revalidateAll();
++}
++
++/** Put a deleted req back into Job Openings. */
++export async function restoreJob(id: string): Promise<void> {
++  if (!isSupabaseConfigured) {
++    const j = demo.jobs.find((x) => x.id === id);
++    if (j) j.deleted_at = null;
++    revalidateAll();
++    return;
++  }
++  const sb = await createClient();
++  await sb.from("jobs").update({ deleted_at: null }).eq("id", id);
++  revalidateAll();
++}
++
++/** Permanently remove a req. Not reversible — only from Deleted Jobs. */
++export async function purgeJob(id: string): Promise<void> {
+   if (!isSupabaseConfigured) {
+     demo.jobs = demo.jobs.filter((j) => j.id !== id);
+     demo.candidates.forEach((c) => {
+diff --git a/lib/types.ts b/lib/types.ts
+index af6425f..7a90f87 100644
+--- a/lib/types.ts
++++ b/lib/types.ts
+@@ -55,6 +55,7 @@ export interface Job {
+   requirements: string | null; // what the role needs (experience, tools, license)
+   client_note: string | null; // general info about the client (shown once per group)
+   notes: string | null;
++  deleted_at: string | null; // set when sent to Deleted Jobs; null while live
+   created_at: string;
+   updated_at: string;
+ }
+diff --git a/lib/us-states.ts b/lib/us-states.ts
+index 7e864dd..1bcb7cb 100644
+--- a/lib/us-states.ts
++++ b/lib/us-states.ts
+@@ -24,6 +24,20 @@ const NAME_TO_CODE: Record<string, string> = Object.fromEntries(
+ 
+ export interface USState { code: string; name: string; }
+ 
++/** Bucket label for reqs whose location has no recognisable state. */
++export const OTHER_STATE = "Other / Unspecified";
++
++/**
++ * True when a location belongs to the given state name. Locations with no
++ * parseable state match only the OTHER_STATE bucket, mirroring how the Job
++ * Openings page groups them.
++ */
++export function locationInState(location: string | null | undefined, stateName: string): boolean {
++  const sts = statesOf(location);
++  if (sts.length === 0) return stateName === OTHER_STATE;
++  return sts.some((s) => s.name === stateName);
++}
++
+ export function statesOf(location: string | null | undefined): USState[] {
+   if (!location) return [];
+   const codes = new Set<string>();
