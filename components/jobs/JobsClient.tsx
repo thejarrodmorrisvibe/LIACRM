@@ -12,7 +12,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Input, Select } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { Plus, MapPin, Briefcase, Trash, Edit, Users, Search } from "@/components/icons";
-import { parseJobTitle } from "@/lib/job-title";
+import { cleanJobTitle, jobOpenings } from "@/lib/job-title";
 import { statesOf, OTHER_STATE, locationInState } from "@/lib/us-states";
 import { cn } from "@/lib/utils";
 import { JobDetail, JobFields, InlineNotes, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
@@ -20,7 +20,7 @@ import { JobDetail, JobFields, InlineNotes, Openings, payLabel, HotToggle } from
 const EMPTY: Partial<Job> = {
   client_name: "", position_title: "", pay_type: "hourly", pay_min: null, pay_max: null,
   location: "", job_type: "Contract", status: "Open", is_hot: false,
-  description: "", requirements: "", client_note: "", notes: "",
+  description: "", requirements: "", client_note: "", notes: "", openings: 1,
 };
 
 const Chevron = ({ open }: { open: boolean }) => (
@@ -221,9 +221,9 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
                                   title="View full job description"
                                   className="truncate rounded-[4px] text-left text-[14px] font-semibold text-ink underline-offset-2 transition-colors hover:text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                                 >
-                                  {parseJobTitle(j.position_title).title}
+                                  {cleanJobTitle(j.position_title)}
                                 </button>
-                                <Openings n={parseJobTitle(j.position_title).openings} />
+                                <Openings n={jobOpenings(j)} />
                               </div>
                               {j.requirements && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-ink-soft">{j.requirements}</p>}
                               <InlineNotes key={`${j.id}:${j.notes ?? ""}`} job={j} />

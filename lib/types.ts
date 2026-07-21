@@ -55,6 +55,7 @@ export interface Job {
   requirements: string | null; // what the role needs (experience, tools, license)
   client_note: string | null; // general info about the client (shown once per group)
   notes: string | null;
+  openings: number; // seats on this req; edited as its own field, not a title prefix
   deleted_at: string | null; // set when sent to Deleted Jobs; null while live
   created_at: string;
   updated_at: string;

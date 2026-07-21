@@ -14,3 +14,14 @@ export function parseJobTitle(raw: string | null | undefined): { openings: numbe
 export function cleanJobTitle(raw: string | null | undefined): string {
   return parseJobTitle(raw).title;
 }
+
+/**
+ * Seats on a req. Prefers the explicit `openings` column, but still honours a
+ * legacy count prefixed onto the title ("10 Structures Mechanics") for rows not
+ * yet backfilled — the column defaults to 1, so without this a pre-backfill row
+ * would silently read as a single seat.
+ */
+export function jobOpenings(job: { openings?: number | null; position_title?: string | null }): number {
+  if (job.openings != null && job.openings > 1) return job.openings;
+  return Math.max(job.openings ?? 1, parseJobTitle(job.position_title).openings);
+}

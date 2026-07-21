@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { Trash, MapPin } from "@/components/icons";
-import { parseJobTitle } from "@/lib/job-title";
+import { cleanJobTitle, jobOpenings } from "@/lib/job-title";
 import { JobDetail, Openings, payLabel } from "@/components/jobs/JobDetail";
 
 function deletedWhen(iso: string | null): string {
@@ -31,12 +31,12 @@ export function DeletedJobsClient({ jobs, candidates }: { jobs: Job[]; candidate
   function restore(j: Job) {
     start(async () => {
       await restoreJob(j.id);
-      toast(`Restored "${parseJobTitle(j.position_title).title}"`);
+      toast(`Restored "${cleanJobTitle(j.position_title)}"`);
     });
   }
 
   function purge(j: Job) {
-    const { title } = parseJobTitle(j.position_title);
+    const title = cleanJobTitle(j.position_title);
     if (!confirm(`Permanently delete "${title}" at ${j.client_name}?\n\nThis cannot be undone.`)) return;
     start(async () => {
       await purgeJob(j.id);
@@ -69,7 +69,8 @@ export function DeletedJobsClient({ jobs, candidates }: { jobs: Job[]; candidate
       ) : (
         <div className="mt-6 space-y-3">
           {jobs.map((j) => {
-            const { title, openings } = parseJobTitle(j.position_title);
+            const title = cleanJobTitle(j.position_title);
+                const openings = jobOpenings(j);
             return (
               <Card key={j.id} className="px-4 py-3.5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start">

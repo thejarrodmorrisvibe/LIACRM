@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { MapPin, Flame } from "@/components/icons";
-import { parseJobTitle } from "@/lib/job-title";
+import { cleanJobTitle, jobOpenings } from "@/lib/job-title";
 import { statesOf, OTHER_STATE, locationInState } from "@/lib/us-states";
 import { JobDetail, InlineNotes, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
 
@@ -111,7 +111,8 @@ export function HotJobsSection({ jobs, candidates }: { jobs: Job[]; candidates: 
 
             <ul className="divide-y divide-line">
               {list.map((j) => {
-                const { title, openings } = parseJobTitle(j.position_title);
+                const title = cleanJobTitle(j.position_title);
+                const openings = jobOpenings(j);
                 return (
                   <li key={j.id} className="flex items-start gap-3 px-4 py-2.5">
                     <div className="min-w-0 flex-1">

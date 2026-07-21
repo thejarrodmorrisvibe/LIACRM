@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { Edit, Users, Book } from "@/components/icons";
-import { parseJobTitle } from "@/lib/job-title";
+import { cleanJobTitle, jobOpenings } from "@/lib/job-title";
 
 /** Shared by the Jobs tab and the Hot Openings tab so both behave identically. */
 
@@ -133,7 +133,20 @@ export function JobFields({
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label="Client"><Input value={form.client_name ?? ""} onChange={(e) => set({ client_name: e.target.value })} placeholder="Bombardier" /></Field>
-      <Field label="Position"><Input value={form.position_title ?? ""} onChange={(e) => set({ position_title: e.target.value })} placeholder="A&P Mechanic" /></Field>
+      <Field label="Position (title only)">
+        <Input
+          value={form.position_title ?? ""}
+          onChange={(e) => set({ position_title: e.target.value })}
+          placeholder="Sr Cabinet Builder"
+        />
+      </Field>
+      <Field label="Total openings (seats)" hint="How many people the client needs for this role">
+        <Input
+          type="number" min={1} max={99}
+          value={form.openings ?? 1}
+          onChange={(e) => set({ openings: Math.max(1, Math.min(99, Number(e.target.value) || 1)) })}
+        />
+      </Field>
       <Field label="Location"><Input value={form.location ?? ""} onChange={(e) => set({ location: e.target.value })} placeholder="Wichita, KS" /></Field>
       <Field label="Pay type">
         <Select value={form.pay_type} onChange={(e) => set({ pay_type: e.target.value as PayType })}>
@@ -198,7 +211,8 @@ export function JobDetail({
     });
   }
 
-  const { title, openings } = parseJobTitle(editing ? (form.position_title ?? "") : job.position_title);
+  const title = cleanJobTitle(editing ? (form.position_title ?? "") : job.position_title);
+  const openings = jobOpenings(editing ? { ...job, ...form } : job);
 
   if (editing) {
     return (

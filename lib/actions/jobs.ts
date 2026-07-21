@@ -65,6 +65,7 @@ export async function createJob(input: Partial<Job>): Promise<void> {
       requirements: input.requirements ?? null,
       client_note: input.client_note ?? null,
       notes: input.notes ?? "",
+      openings: input.openings ?? 1,
       deleted_at: null,
       created_at: now,
       updated_at: now,
@@ -144,7 +145,7 @@ export async function purgeJob(id: string): Promise<void> {
 function sanitize(input: Partial<Job>): Partial<Job> {
   const allowed: (keyof Job)[] = [
     "client_name", "position_title", "pay_type", "pay_amount", "pay_min", "pay_max",
-    "location", "job_type", "status", "is_hot", "description", "requirements", "client_note", "notes",
+    "location", "job_type", "status", "is_hot", "description", "requirements", "client_note", "notes", "openings",
   ];
   const out: Record<string, unknown> = {};
   for (const k of allowed) if (k in input) out[k] = input[k];
