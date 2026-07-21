@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, type ComponentType, type ReactNode, type SVGProps } from "react";
 import {
-  Gauge, Kanban, Briefcase, CheckSquare, Dollar, Logout, Menu, Sparkles, Send, Grid, Gift, CalendarClock, Activity, Flame,
+  Gauge, Kanban, Briefcase, CheckSquare, Dollar, Logout, Menu, Sparkles, Send, Grid, Gift, CalendarClock, Activity, Flame, Trash,
 } from "@/components/icons";
 
 type Item = { href: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement>>; hint: string };
@@ -20,6 +20,7 @@ const NAV: Item[] = [
   { href: "/interviews", label: "Interviews", icon: CalendarClock, hint: "Scheduled interviews" },
   { href: "/jobs", label: "Job Openings", icon: Briefcase, hint: "Open reqs & hot list" },
   { href: "/hot-openings", label: "Hot Openings", icon: Flame, hint: "Reqs by client & discipline" },
+  { href: "/deleted-jobs", label: "Deleted Jobs", icon: Trash, hint: "Restore removed reqs" },
   { href: "/tasks", label: "Tasks", icon: CheckSquare, hint: "Tasks & brain dump" },
   { href: "/referrals", label: "Referrals", icon: Gift, hint: "$250 bonus tracker" },
   { href: "/commissions", label: "Commissions", icon: Dollar, hint: "Quarterly estimate" },
