@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition } from "react";
 import type { Job, Candidate, PayType, JobStatus } from "@/lib/types";
-import { JOB_STATUS_TONE, STAGE_LABEL } from "@/lib/types";
-import { createJob, updateJob, deleteJob } from "@/lib/actions/jobs";
+import { JOB_STATUS_TONE } from "@/lib/types";
+import { createJob, updateJob, deleteJob, toggleHot } from "@/lib/actions/jobs";
 import { PageHeader, PageShell } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -11,28 +11,11 @@ import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
-import { Plus, MapPin, Briefcase, Trash, Edit, Users, Search } from "@/components/icons";
+import { Plus, MapPin, Briefcase, Trash, Edit, Users, Search, Book } from "@/components/icons";
 import { parseJobTitle } from "@/lib/job-title";
 import { statesOf } from "@/lib/us-states";
 import { cn } from "@/lib/utils";
-
-/** Small pill showing how many openings a role has (only when > 1). */
-function Openings({ n }: { n: number }) {
-  if (n <= 1) return null;
-  return <Badge tone="info">×{n} openings</Badge>;
-}
-
-function payLabel(j: Job): string {
-  const salary = j.pay_type === "salary";
-  const fmt = (n: number) => (salary ? `$${Math.round(n / 1000)}k` : `$${n}`);
-  const { pay_min: min, pay_max: max } = j;
-  if (min != null && max != null) {
-    if (min === max) return `${fmt(min)}${salary ? "/yr" : "/hr"}`;
-    return salary ? `${fmt(min)}–${fmt(max)}/yr` : `$${min}–${max}/hr`;
-  }
-  if (j.pay_amount != null) return salary ? `$${j.pay_amount.toLocaleString()}/yr` : `$${j.pay_amount}/hr`;
-  return "Pay TBD";
-}
+import { JobDetail, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
 
 const EMPTY: Partial<Job> = {
   client_name: "", position_title: "", pay_type: "hourly", pay_min: null, pay_max: null,
@@ -61,7 +44,7 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
     const q = query.trim().toLowerCase();
     if (!q) return jobs;
     return jobs.filter((j) =>
-      [j.client_name, j.position_title, j.location, j.requirements, j.client_note]
+      [j.client_name, j.position_title, j.location, j.requirements, j.client_note, j.notes, j.description]
         .filter(Boolean).join(" ").toLowerCase().includes(q),
     );
   }, [jobs, query]);
@@ -109,6 +92,13 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
   function remove(j: Job) {
     if (!confirm(`Delete "${j.position_title}" at ${j.client_name}?`)) return;
     start(async () => { await deleteJob(j.id); toast("Opening deleted", "info"); });
+  }
+  /** Add/remove this req from the Hot Openings list. */
+  function hot(j: Job) {
+    start(async () => {
+      await toggleHot(j.id, !j.is_hot);
+      toast(j.is_hot ? `Removed from Hot Openings` : `Added to Hot Openings`);
+    });
   }
   function toggleClient(name: string) {
     setCollapsed((s) => {
@@ -173,14 +163,14 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
                 {!isCollapsed && (
                   <div className="border-t border-line">
                     {/* Column header (desktop) */}
-                    <div className="hidden grid-cols-[1fr_160px_110px_130px_64px] gap-4 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint sm:grid">
+                    <div className="hidden grid-cols-[1fr_160px_110px_130px_96px] gap-4 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-faint sm:grid">
                       <span>Position</span><span>Location</span><span className="text-right">Pay</span><span>Hire type</span><span />
                     </div>
                     <ul className="divide-y divide-line">
                       {list.map((j) => {
                         const n = candCount(j.id);
                         return (
-                          <li key={j.id} className="grid grid-cols-1 gap-x-4 gap-y-1 px-5 py-3.5 transition-colors hover:bg-surface-2 sm:grid-cols-[1fr_160px_110px_130px_64px] sm:items-center">
+                          <li key={j.id} className="grid grid-cols-1 gap-x-4 gap-y-1 px-5 py-3.5 transition-colors hover:bg-surface-2 sm:grid-cols-[1fr_160px_110px_130px_96px] sm:items-center">
                             {/* Position + requirements */}
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
@@ -194,6 +184,12 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
                                 <Openings n={parseJobTitle(j.position_title).openings} />
                               </div>
                               {j.requirements && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-ink-soft">{j.requirements}</p>}
+                              {j.notes && (
+                                <p className="mt-1 flex items-start gap-1.5 text-[11.5px] leading-snug text-muted">
+                                  <Book width={12} height={12} className="mt-[2px] shrink-0 text-faint" />
+                                  <span className="line-clamp-2">{j.notes}</span>
+                                </p>
+                              )}
                             </div>
                             {/* Location */}
                             <div className="flex items-center gap-1 text-[12.5px] text-muted">
@@ -209,6 +205,7 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
                             </div>
                             {/* Actions */}
                             <div className="flex items-center gap-0.5 sm:justify-end">
+                              <HotToggle hot={j.is_hot} onToggle={() => hot(j)} pending={pending} />
                               <button onClick={() => setEditing(j)} className="grid h-7 w-7 place-items-center rounded-[7px] text-muted hover:bg-accent-soft hover:text-accent" aria-label="Edit"><Edit width={15} height={15} /></button>
                               <button onClick={() => remove(j)} className="grid h-7 w-7 place-items-center rounded-[7px] text-muted hover:bg-bad-soft hover:text-bad" aria-label="Delete"><Trash width={15} height={15} /></button>
                             </div>
@@ -240,97 +237,6 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
         <JobForm initial={editing} pending={pending} onClose={() => setEditing(null)} onSave={save} />
       )}
     </PageShell>
-  );
-}
-
-/** Read-only full job description, opened by clicking a position title. */
-function JobDetail({
-  job, candidates, onClose, onEdit,
-}: {
-  job: Job;
-  candidates: Candidate[];
-  onClose: () => void;
-  onEdit: () => void;
-}) {
-  const { title, openings } = parseJobTitle(job.position_title);
-
-  const facts: [string, ReactNode][] = [
-    ["Client", job.client_name],
-    ["Location", job.location || "—"],
-    ["Pay", <span key="p" className="font-display font-bold text-accent">{payLabel(job)}</span>],
-    ["Hire type", job.job_type || "—"],
-    ["Status", <Badge key="s" tone={JOB_STATUS_TONE[job.status]}>{job.status}</Badge>],
-    ["Openings", openings > 1 ? `${openings} seats` : "1 seat"],
-  ];
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      size="lg"
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          {title}
-          <Openings n={openings} />
-        </span>
-      }
-      subtitle={`${job.client_name}${job.location ? ` · ${job.location}` : ""}`}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>Close</Button>
-          <Button onClick={onEdit}><Edit width={16} height={16} /> Edit</Button>
-        </>
-      }
-    >
-      {/* Fact grid */}
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3.5 sm:grid-cols-3">
-        {facts.map(([label, value]) => (
-          <div key={label}>
-            <dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</dt>
-            <dd className="mt-1 flex items-center text-[13.5px] text-ink">{value}</dd>
-          </div>
-        ))}
-      </dl>
-
-      <DetailSection label="Full job description" body={job.description} empty="No full JD on file yet. Click Edit to add one." />
-      <DetailSection label="Must-have qualifications" body={job.requirements} />
-      <DetailSection label="Client note" body={job.client_note} />
-      <DetailSection label="Internal notes" body={job.notes} />
-
-      {/* Candidates in play */}
-      <div className="mt-6 border-t border-line pt-4">
-        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-faint">
-          Candidates on this req
-        </h4>
-        {candidates.length === 0 ? (
-          <p className="mt-1.5 text-[13px] text-muted">Nobody submitted to this opening yet.</p>
-        ) : (
-          <ul className="mt-2 flex flex-wrap gap-2">
-            {candidates.map((c) => (
-              <li key={c.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-line bg-surface-2 px-2.5 py-1.5">
-                <Users width={13} height={13} className="text-faint" />
-                <span className="text-[13px] font-medium text-ink">{c.name}</span>
-                <Badge tone="neutral">{STAGE_LABEL[c.stage]}</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
-function DetailSection({ label, body, empty }: { label: string; body?: string | null; empty?: string }) {
-  if (!body && !empty) return null;
-  return (
-    <div className="mt-6 border-t border-line pt-4">
-      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</h4>
-      {body ? (
-        <p className="mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink-soft">{body}</p>
-      ) : (
-        <p className="mt-1.5 text-[13px] text-muted">{empty}</p>
-      )}
-    </div>
   );
 }
 
@@ -393,8 +299,8 @@ function JobForm({
         <Field label="Client note (shown on the group)" className="sm:col-span-2">
           <Input value={form.client_note ?? ""} onChange={(e) => set({ client_note: e.target.value })} placeholder="Direct hiring only · per diem · US citizenship required" />
         </Field>
-        <Field label="Internal notes" className="sm:col-span-2">
-          <Textarea rows={2} value={form.notes ?? ""} onChange={(e) => set({ notes: e.target.value })} placeholder="Taxes, shift differential, anything to remember…" />
+        <Field label="Notes (shown under the role in the list)" className="sm:col-span-2">
+          <Textarea rows={2} value={form.notes ?? ""} onChange={(e) => set({ notes: e.target.value })} placeholder="Req ID, address, state min wage, shift differential, anything to remember…" />
         </Field>
       </div>
     </Modal>

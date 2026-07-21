@@ -7,8 +7,16 @@ import {
   HOT_OPENINGS, openingSeats, clientSeats, stateSeats,
   grandTotalSeats, distinctClientCount, type HotState,
 } from "@/lib/hot-openings";
+import { listJobs } from "@/lib/actions/jobs";
+import { listCandidates } from "@/lib/actions/candidates";
+import { HotJobsSection } from "@/components/jobs/HotJobsSection";
 
-export default function HotOpeningsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function HotOpeningsPage() {
+  const [allJobs, candidates] = await Promise.all([listJobs(), listCandidates()]);
+  const hotJobs = allJobs.filter((j) => j.is_hot);
+
   const states: HotState[] = [...HOT_OPENINGS].sort(
     (a, b) => stateSeats(b) - stateSeats(a) || a.state.localeCompare(b.state),
   );
@@ -35,8 +43,26 @@ export default function HotOpeningsPage() {
         <StatCard label="Hottest State" value={hottest ? stateSeats(hottest) : 0} accent="emerald" icon={<Star width={17} height={17} />} sub={hottest ? `${hottest.state} seats` : "—"} />
       </div>
 
-      {/* State -> Client -> roles */}
-      <div className="mt-7 space-y-7">
+      {/* Reqs pinned from the Job Openings tab (jobs.is_hot) */}
+      <section className="mt-8">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <Flame width={18} height={18} className="text-warn" />
+          <h2 className="font-display text-[19px] font-extrabold tracking-tight text-ink">Your Pinned Reqs</h2>
+          <Badge tone="warn">{hotJobs.length}</Badge>
+          <span className="text-[12px] text-faint">
+            From Job Openings · tap a title for the full JD, tap the flame to unpin
+          </span>
+        </div>
+        <HotJobsSection jobs={hotJobs} candidates={candidates} />
+      </section>
+
+      {/* GAL USA HOT List (Master Tracker) — State -> Client -> roles */}
+      <div className="mt-9 mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line-strong pt-7">
+        <Star width={18} height={18} className="text-warn" />
+        <h2 className="font-display text-[19px] font-extrabold tracking-tight text-ink">GAL USA HOT List</h2>
+        <span className="text-[12px] text-faint">Synced from the Master Tracker</span>
+      </div>
+      <div className="space-y-7">
         {states.map((s) => {
           const sSeats = stateSeats(s);
           return (
