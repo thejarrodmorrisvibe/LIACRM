@@ -11,11 +11,11 @@ import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Input, Select } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
-import { Plus, MapPin, Briefcase, Trash, Edit, Users, Search, Book } from "@/components/icons";
+import { Plus, MapPin, Briefcase, Trash, Edit, Users, Search } from "@/components/icons";
 import { parseJobTitle } from "@/lib/job-title";
 import { statesOf, OTHER_STATE, locationInState } from "@/lib/us-states";
 import { cn } from "@/lib/utils";
-import { JobDetail, JobFields, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
+import { JobDetail, JobFields, InlineNotes, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
 
 const EMPTY: Partial<Job> = {
   client_name: "", position_title: "", pay_type: "hourly", pay_min: null, pay_max: null,
@@ -226,12 +226,7 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
                                 <Openings n={parseJobTitle(j.position_title).openings} />
                               </div>
                               {j.requirements && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-ink-soft">{j.requirements}</p>}
-                              {j.notes && (
-                                <p className="mt-1 flex items-start gap-1.5 text-[11.5px] leading-snug text-muted">
-                                  <Book width={12} height={12} className="mt-[2px] shrink-0 text-faint" />
-                                  <span className="line-clamp-2">{j.notes}</span>
-                                </p>
-                              )}
+                              <InlineNotes key={`${j.id}:${j.notes ?? ""}`} job={j} />
                             </div>
                             {/* Location */}
                             <div className="flex items-center gap-1 text-[12.5px] text-muted">

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
-import { Edit, Users } from "@/components/icons";
+import { Edit, Users, Book } from "@/components/icons";
 import { parseJobTitle } from "@/lib/job-title";
 
 /** Shared by the Jobs tab and the Hot Openings tab so both behave identically. */
@@ -43,6 +43,82 @@ export function DetailSection({ label, body, empty }: { label: string; body?: st
         <p className="mt-1.5 text-[13px] text-muted">{empty}</p>
       )}
     </div>
+  );
+}
+
+/**
+ * The note shown under a role in the list, editable in place. Click the note
+ * (or "Add note") to turn it into a textarea; Ctrl/Cmd+Enter saves, Esc cancels.
+ * Used on both Job Openings and Hot Openings.
+ */
+export function InlineNotes({ job }: { job: Job }) {
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(job.notes ?? "");
+  const [value, setValue] = useState(job.notes ?? "");
+  const [pending, start] = useTransition();
+  const toast = useToast();
+
+  function cancel() {
+    setValue(saved);
+    setEditing(false);
+  }
+
+  function save() {
+    const next = value.trim();
+    start(async () => {
+      await updateJob(job.id, { notes: next });
+      setSaved(next);
+      setEditing(false);
+      toast(next ? "Note saved" : "Note cleared");
+    });
+  }
+
+  if (editing) {
+    return (
+      <div className="mt-1.5">
+        <Textarea
+          rows={2}
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") cancel();
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
+          }}
+          placeholder="Req ID, address, state min wage, shift differential, anything to remember…"
+          className="text-[12px]"
+        />
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={save} disabled={pending}>
+            {pending ? "Saving…" : "Save note"}
+          </Button>
+          <Button size="sm" variant="secondary" onClick={cancel}>Cancel</Button>
+          <span className="text-[11px] text-faint">Ctrl/⌘ + Enter to save · Esc to cancel</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!saved) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="mt-1 inline-flex items-center gap-1.5 rounded-[5px] text-[11.5px] text-faint transition-colors hover:text-accent"
+      >
+        <Book width={12} height={12} /> Add note
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      title="Click to edit this note"
+      className="mt-1 flex w-full items-start gap-1.5 rounded-[5px] text-left text-[11.5px] leading-snug text-muted transition-colors hover:text-ink"
+    >
+      <Book width={12} height={12} className="mt-[2px] shrink-0 text-faint" />
+      <span className="line-clamp-2">{saved}</span>
+    </button>
   );
 }
 

@@ -7,10 +7,10 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
-import { MapPin, Book, Flame } from "@/components/icons";
+import { MapPin, Flame } from "@/components/icons";
 import { parseJobTitle } from "@/lib/job-title";
 import { statesOf, OTHER_STATE, locationInState } from "@/lib/us-states";
-import { JobDetail, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
+import { JobDetail, InlineNotes, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
 
 /**
  * Reqs pinned to the hot list from the Job Openings tab (jobs.is_hot).
@@ -135,12 +135,7 @@ export function HotJobsSection({ jobs, candidates }: { jobs: Job[]; candidates: 
                       {j.requirements && (
                         <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-ink-soft">{j.requirements}</p>
                       )}
-                      {j.notes && (
-                        <p className="mt-1 flex items-start gap-1.5 text-[11.5px] leading-snug text-muted">
-                          <Book width={12} height={12} className="mt-[2px] shrink-0 text-faint" />
-                          <span className="line-clamp-2">{j.notes}</span>
-                        </p>
-                      )}
+                      <InlineNotes key={`${j.id}:${j.notes ?? ""}`} job={j} />
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2 pt-0.5">
