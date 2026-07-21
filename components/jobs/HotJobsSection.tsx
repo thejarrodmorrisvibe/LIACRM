@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import type { Job, Candidate } from "@/lib/types";
 import { toggleHot } from "@/lib/actions/jobs";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Select } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { MapPin, Book, Flame } from "@/components/icons";
 import { parseJobTitle } from "@/lib/job-title";
+import { statesOf, OTHER_STATE, locationInState } from "@/lib/us-states";
 import { JobDetail, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
 
 /**
@@ -19,6 +21,7 @@ export function HotJobsSection({ jobs, candidates }: { jobs: Job[]; candidates: 
   const [pending, start] = useTransition();
   const toast = useToast();
   const [viewing, setViewing] = useState<Job | null>(null);
+  const [stateFilter, setStateFilter] = useState("");
 
   function unpin(j: Job) {
     start(async () => {
@@ -26,6 +29,24 @@ export function HotJobsSection({ jobs, candidates }: { jobs: Job[]; candidates: 
       toast("Removed from Hot Openings", "info");
     });
   }
+
+  /** States represented among the pinned reqs, with counts. */
+  const stateOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const j of jobs) {
+      const sts = statesOf(j.location);
+      if (sts.length === 0) counts.set(OTHER_STATE, (counts.get(OTHER_STATE) ?? 0) + 1);
+      else for (const s of sts) counts.set(s.name, (counts.get(s.name) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort(
+      (a, b) => (a[0] === OTHER_STATE ? 1 : 0) - (b[0] === OTHER_STATE ? 1 : 0) || a[0].localeCompare(b[0]),
+    );
+  }, [jobs]);
+
+  const visible = useMemo(
+    () => (stateFilter ? jobs.filter((j) => locationInState(j.location, stateFilter)) : jobs),
+    [jobs, stateFilter],
+  );
 
   if (jobs.length === 0) {
     return (
@@ -42,7 +63,7 @@ export function HotJobsSection({ jobs, candidates }: { jobs: Job[]; candidates: 
   }
 
   const byClient = new Map<string, Job[]>();
-  for (const j of jobs) {
+  for (const j of visible) {
     if (!byClient.has(j.client_name)) byClient.set(j.client_name, []);
     byClient.get(j.client_name)!.push(j);
   }
@@ -50,6 +71,36 @@ export function HotJobsSection({ jobs, candidates }: { jobs: Job[]; candidates: 
 
   return (
     <>
+      {stateOptions.length > 1 && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Select
+            value={stateFilter}
+            onChange={(e) => setStateFilter(e.target.value)}
+            aria-label="Filter pinned reqs by state"
+            className="w-full sm:w-[230px]"
+          >
+            <option value="">All states ({jobs.length} pinned)</option>
+            {stateOptions.map(([name, n]) => (
+              <option key={name} value={name}>{name} ({n})</option>
+            ))}
+          </Select>
+          {stateFilter && (
+            <button
+              onClick={() => setStateFilter("")}
+              className="rounded-[6px] border border-line px-2 py-0.5 text-[12px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      {clients.length === 0 ? (
+        <Card className="mt-4 px-6 py-10 text-center">
+          <p className="font-display font-bold text-ink">No pinned reqs in {stateFilter}</p>
+          <p className="mt-1 text-[13.5px] text-muted">Pick a different state, or clear the filter.</p>
+        </Card>
+      ) : (
       <div className="mt-4 space-y-3">
         {clients.map(([client, list]) => (
           <Card key={client} className="overflow-hidden">
@@ -103,6 +154,7 @@ export function HotJobsSection({ jobs, candidates }: { jobs: Job[]; candidates: 
           </Card>
         ))}
       </div>
+      )}
 
       {viewing && (
         <JobDetail

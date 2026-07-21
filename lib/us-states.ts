@@ -24,6 +24,20 @@ const NAME_TO_CODE: Record<string, string> = Object.fromEntries(
 
 export interface USState { code: string; name: string; }
 
+/** Bucket label for reqs whose location has no recognisable state. */
+export const OTHER_STATE = "Other / Unspecified";
+
+/**
+ * True when a location belongs to the given state name. Locations with no
+ * parseable state match only the OTHER_STATE bucket, mirroring how the Job
+ * Openings page groups them.
+ */
+export function locationInState(location: string | null | undefined, stateName: string): boolean {
+  const sts = statesOf(location);
+  if (sts.length === 0) return stateName === OTHER_STATE;
+  return sts.some((s) => s.name === stateName);
+}
+
 export function statesOf(location: string | null | undefined): USState[] {
   if (!location) return [];
   const codes = new Set<string>();

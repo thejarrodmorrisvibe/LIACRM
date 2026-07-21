@@ -13,7 +13,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { Plus, MapPin, Briefcase, Trash, Edit, Users, Search, Book } from "@/components/icons";
 import { parseJobTitle } from "@/lib/job-title";
-import { statesOf } from "@/lib/us-states";
+import { statesOf, OTHER_STATE, locationInState } from "@/lib/us-states";
 import { cn } from "@/lib/utils";
 import { JobDetail, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
 
@@ -36,18 +36,33 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
   const [editing, setEditing] = useState<Partial<Job> | null>(null);
   const [viewing, setViewing] = useState<Job | null>(null);
   const [query, setQuery] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const candCount = (jobId: string) => candidates.filter((c) => c.job_id === jobId).length;
 
+  /** Every state that currently has reqs, with a count. Multi-site reqs count in each. */
+  const stateOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const j of jobs) {
+      const sts = statesOf(j.location);
+      if (sts.length === 0) counts.set(OTHER_STATE, (counts.get(OTHER_STATE) ?? 0) + 1);
+      else for (const s of sts) counts.set(s.name, (counts.get(s.name) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort(
+      (a, b) => (a[0] === OTHER_STATE ? 1 : 0) - (b[0] === OTHER_STATE ? 1 : 0) || a[0].localeCompare(b[0]),
+    );
+  }, [jobs]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return jobs;
-    return jobs.filter((j) =>
-      [j.client_name, j.position_title, j.location, j.requirements, j.client_note, j.notes, j.description]
-        .filter(Boolean).join(" ").toLowerCase().includes(q),
-    );
-  }, [jobs, query]);
+    return jobs.filter((j) => {
+      if (stateFilter && !locationInState(j.location, stateFilter)) return false;
+      if (!q) return true;
+      return [j.client_name, j.position_title, j.location, j.requirements, j.client_note, j.notes, j.description]
+        .filter(Boolean).join(" ").toLowerCase().includes(q);
+    });
+  }, [jobs, query, stateFilter]);
 
   // Group by state, then by client within each state. A multi-site opening
   // (location naming two states) shows under each of its states.
@@ -61,7 +76,7 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
     };
     for (const j of filtered) {
       const sts = statesOf(j.location);
-      if (sts.length === 0) add("Other / Unspecified", j);
+      if (sts.length === 0) add(OTHER_STATE, j);
       else for (const s of sts) add(s.name, j);
     }
     return [...byState.entries()]
@@ -72,7 +87,7 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
         clientCount: cm.size,
       }))
       .sort((a, b) =>
-        (a.state === "Other / Unspecified" ? 1 : 0) - (b.state === "Other / Unspecified" ? 1 : 0) ||
+        (a.state === OTHER_STATE ? 1 : 0) - (b.state === OTHER_STATE ? 1 : 0) ||
         a.state.localeCompare(b.state),
       );
   }, [filtered]);
@@ -116,11 +131,38 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
         action={<Button onClick={() => setEditing({ ...EMPTY })}><Plus width={17} height={17} /> Add Opening</Button>}
       />
 
-      {/* Search */}
-      <div className="relative mt-5">
-        <Search width={17} height={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search position, client, location, requirement…" className="pl-9" />
+      {/* Search + state filter */}
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search width={17} height={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search position, client, location, requirement…" className="pl-9" />
+        </div>
+        <Select
+          value={stateFilter}
+          onChange={(e) => setStateFilter(e.target.value)}
+          aria-label="Filter by state"
+          className="sm:w-[230px]"
+        >
+          <option value="">All states ({jobs.length} roles)</option>
+          {stateOptions.map(([name, n]) => (
+            <option key={name} value={name}>{name} ({n})</option>
+          ))}
+        </Select>
       </div>
+
+      {stateFilter && (
+        <p className="mt-2.5 flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
+          Showing <span className="font-semibold text-ink">{filtered.length}</span>{" "}
+          {filtered.length === 1 ? "role" : "roles"} in{" "}
+          <span className="font-semibold text-ink">{stateFilter}</span>
+          <button
+            onClick={() => setStateFilter("")}
+            className="rounded-[6px] border border-line px-2 py-0.5 text-[12px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          >
+            Clear
+          </button>
+        </p>
+      )}
 
       {/* State → Client tables */}
       {stateGroups.length === 0 ? (
