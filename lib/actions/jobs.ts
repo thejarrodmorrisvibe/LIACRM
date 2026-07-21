@@ -8,6 +8,7 @@ import type { Job } from "@/lib/types";
 
 function revalidateAll() {
   revalidatePath("/jobs");
+  revalidatePath("/hot-openings");
   revalidatePath("/pipeline");
   revalidatePath("/roster");
 }

@@ -1,11 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
-import type { Job, Candidate } from "@/lib/types";
+import { useState, useTransition, type ReactNode } from "react";
+import type { Job, Candidate, PayType, JobStatus } from "@/lib/types";
 import { JOB_STATUS_TONE, STAGE_LABEL } from "@/lib/types";
+import { updateJob } from "@/lib/actions/jobs";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
+import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { useToast } from "@/components/ui/Toast";
 import { Edit, Users } from "@/components/icons";
 import { parseJobTitle } from "@/lib/job-title";
 
@@ -43,23 +46,114 @@ export function DetailSection({ label, body, empty }: { label: string; body?: st
   );
 }
 
-/** Read-only full job description, opened by clicking a position title. */
+/** Every editable field of a req. Shared by the popup's edit mode and the Add form. */
+export function JobFields({
+  form, set,
+}: {
+  form: Partial<Job>;
+  set: (patch: Partial<Job>) => void;
+}) {
+  const salary = form.pay_type === "salary";
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field label="Client"><Input value={form.client_name ?? ""} onChange={(e) => set({ client_name: e.target.value })} placeholder="Bombardier" /></Field>
+      <Field label="Position"><Input value={form.position_title ?? ""} onChange={(e) => set({ position_title: e.target.value })} placeholder="A&P Mechanic" /></Field>
+      <Field label="Location"><Input value={form.location ?? ""} onChange={(e) => set({ location: e.target.value })} placeholder="Wichita, KS" /></Field>
+      <Field label="Pay type">
+        <Select value={form.pay_type} onChange={(e) => set({ pay_type: e.target.value as PayType })}>
+          <option value="hourly">Hourly</option><option value="salary">Salary</option>
+        </Select>
+      </Field>
+      <Field label={salary ? "Salary min ($)" : "Rate min ($/hr)"}>
+        <Input type="number" value={form.pay_min ?? ""} onChange={(e) => set({ pay_min: e.target.value === "" ? null : Number(e.target.value) })} placeholder={salary ? "120000" : "30"} />
+      </Field>
+      <Field label={salary ? "Salary max ($)" : "Rate max ($/hr)"}>
+        <Input type="number" value={form.pay_max ?? ""} onChange={(e) => set({ pay_max: e.target.value === "" ? null : Number(e.target.value) })} placeholder={salary ? "140000" : "40"} />
+      </Field>
+      <Field label="Hire type">
+        <Select value={form.job_type ?? ""} onChange={(e) => set({ job_type: e.target.value })}>
+          <option>Contract</option><option>Contract-to-Hire</option><option>Direct Hire</option>
+        </Select>
+      </Field>
+      <Field label="Status">
+        <Select value={form.status} onChange={(e) => set({ status: e.target.value as JobStatus })}>
+          <option>Open</option><option>Filled</option><option>On Hold</option>
+        </Select>
+      </Field>
+      <Field label="Full job description (shown in the popup)" className="sm:col-span-2">
+        <Textarea rows={8} value={form.description ?? ""} onChange={(e) => set({ description: e.target.value })} placeholder="Paste the client's full JD: overview, what you will do, preferred quals, clearance…" />
+      </Field>
+      <Field label="Must-have qualifications (2-line preview in the table)" className="sm:col-span-2">
+        <Textarea rows={2} value={form.requirements ?? ""} onChange={(e) => set({ requirements: e.target.value })} placeholder="Experience, tools, licenses, aircraft types…" />
+      </Field>
+      <Field label="Client note (shown on the group)" className="sm:col-span-2">
+        <Input value={form.client_note ?? ""} onChange={(e) => set({ client_note: e.target.value })} placeholder="Direct hiring only · per diem · US citizenship required" />
+      </Field>
+      <Field label="Notes (shown under the role in the list)" className="sm:col-span-2">
+        <Textarea rows={2} value={form.notes ?? ""} onChange={(e) => set({ notes: e.target.value })} placeholder="Req ID, address, state min wage, shift differential, anything to remember…" />
+      </Field>
+    </div>
+  );
+}
+
+/**
+ * Full job description popup. Opens read-only; the Edit button flips the same
+ * modal into a form covering every field, so a req can be edited from wherever
+ * it was opened (Job Openings or Hot Openings).
+ */
 export function JobDetail({
-  job, candidates, onClose, onEdit,
+  job, candidates, onClose,
 }: {
   job: Job;
   candidates: Candidate[];
   onClose: () => void;
-  onEdit?: () => void;
 }) {
-  const { title, openings } = parseJobTitle(job.position_title);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<Partial<Job>>(job);
+  const [pending, start] = useTransition();
+  const toast = useToast();
+  const set = (patch: Partial<Job>) => setForm((f) => ({ ...f, ...patch }));
+
+  function save() {
+    start(async () => {
+      await updateJob(job.id, form);
+      toast("Opening updated");
+      setEditing(false);
+    });
+  }
+
+  const { title, openings } = parseJobTitle(editing ? (form.position_title ?? "") : job.position_title);
+
+  if (editing) {
+    return (
+      <Modal
+        open
+        onClose={() => setEditing(false)}
+        size="lg"
+        title="Edit Opening"
+        subtitle={`${form.client_name || job.client_name}${form.location ? ` · ${form.location}` : ""}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setForm(job); setEditing(false); }}>Cancel</Button>
+            <Button onClick={save} disabled={pending}>{pending ? "Saving…" : "Save"}</Button>
+          </>
+        }
+      >
+        <JobFields form={form} set={set} />
+      </Modal>
+    );
+  }
+
+
+  // Show freshly saved values immediately, before the server round-trip lands.
+  const view = { ...job, ...form } as Job;
 
   const facts: [string, ReactNode][] = [
-    ["Client", job.client_name],
-    ["Location", job.location || "—"],
-    ["Pay", <span key="p" className="font-display font-bold text-accent">{payLabel(job)}</span>],
-    ["Hire type", job.job_type || "—"],
-    ["Status", <Badge key="s" tone={JOB_STATUS_TONE[job.status]}>{job.status}</Badge>],
+    ["Client", view.client_name],
+    ["Location", view.location || "—"],
+    ["Pay", <span key="p" className="font-display font-bold text-accent">{payLabel(view)}</span>],
+    ["Hire type", view.job_type || "—"],
+    ["Status", <Badge key="s" tone={JOB_STATUS_TONE[view.status]}>{view.status}</Badge>],
     ["Openings", openings > 1 ? `${openings} seats` : "1 seat"],
   ];
 
@@ -74,11 +168,11 @@ export function JobDetail({
           <Openings n={openings} />
         </span>
       }
-      subtitle={`${job.client_name}${job.location ? ` · ${job.location}` : ""}`}
+      subtitle={`${view.client_name}${view.location ? ` · ${view.location}` : ""}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Close</Button>
-          {onEdit && <Button onClick={onEdit}><Edit width={16} height={16} /> Edit</Button>}
+          <Button onClick={() => setEditing(true)}><Edit width={16} height={16} /> Edit</Button>
         </>
       }
     >
@@ -92,10 +186,10 @@ export function JobDetail({
         ))}
       </dl>
 
-      <DetailSection label="Full job description" body={job.description} empty="No full JD on file yet. Click Edit to add one." />
-      <DetailSection label="Must-have qualifications" body={job.requirements} />
-      <DetailSection label="Client note" body={job.client_note} />
-      <DetailSection label="Notes" body={job.notes} />
+      <DetailSection label="Full job description" body={view.description} empty="No full JD on file yet. Click Edit to add one." />
+      <DetailSection label="Must-have qualifications" body={view.requirements} />
+      <DetailSection label="Client note" body={view.client_note} />
+      <DetailSection label="Notes" body={view.notes} />
 
       {/* Candidates in play */}
       <div className="mt-6 border-t border-line pt-4">

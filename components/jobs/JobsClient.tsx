@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import type { Job, Candidate, PayType, JobStatus } from "@/lib/types";
+import type { Job, Candidate } from "@/lib/types";
 import { JOB_STATUS_TONE } from "@/lib/types";
 import { createJob, updateJob, deleteJob, toggleHot } from "@/lib/actions/jobs";
 import { PageHeader, PageShell } from "@/components/layout/PageHeader";
@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
-import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { Input, Select } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { Plus, MapPin, Briefcase, Trash, Edit, Users, Search, Book } from "@/components/icons";
 import { parseJobTitle } from "@/lib/job-title";
 import { statesOf, OTHER_STATE, locationInState } from "@/lib/us-states";
 import { cn } from "@/lib/utils";
-import { JobDetail, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
+import { JobDetail, JobFields, Openings, payLabel, HotToggle } from "@/components/jobs/JobDetail";
 
 const EMPTY: Partial<Job> = {
   client_name: "", position_title: "", pay_type: "hourly", pay_min: null, pay_max: null,
@@ -271,7 +271,6 @@ export function JobsClient({ jobs, candidates }: { jobs: Job[]; candidates: Cand
           job={viewing}
           candidates={candidates.filter((c) => c.job_id === viewing.id)}
           onClose={() => setViewing(null)}
-          onEdit={() => { setEditing(viewing); setViewing(null); }}
         />
       )}
 
@@ -293,7 +292,6 @@ function JobForm({
   const [form, setForm] = useState<Partial<Job>>(initial);
   const set = (patch: Partial<Job>) => setForm((f) => ({ ...f, ...patch }));
   const isNew = !initial.id;
-  const salary = form.pay_type === "salary";
 
   return (
     <Modal
@@ -307,44 +305,7 @@ function JobForm({
         </>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Client"><Input value={form.client_name ?? ""} onChange={(e) => set({ client_name: e.target.value })} placeholder="Bombardier" /></Field>
-        <Field label="Position"><Input value={form.position_title ?? ""} onChange={(e) => set({ position_title: e.target.value })} placeholder="A&P Mechanic" /></Field>
-        <Field label="Location"><Input value={form.location ?? ""} onChange={(e) => set({ location: e.target.value })} placeholder="Wichita, KS" /></Field>
-        <Field label="Pay type">
-          <Select value={form.pay_type} onChange={(e) => set({ pay_type: e.target.value as PayType })}>
-            <option value="hourly">Hourly</option><option value="salary">Salary</option>
-          </Select>
-        </Field>
-        <Field label={salary ? "Salary min ($)" : "Rate min ($/hr)"}>
-          <Input type="number" value={form.pay_min ?? ""} onChange={(e) => set({ pay_min: e.target.value === "" ? null : Number(e.target.value) })} placeholder={salary ? "120000" : "30"} />
-        </Field>
-        <Field label={salary ? "Salary max ($)" : "Rate max ($/hr)"}>
-          <Input type="number" value={form.pay_max ?? ""} onChange={(e) => set({ pay_max: e.target.value === "" ? null : Number(e.target.value) })} placeholder={salary ? "140000" : "40"} />
-        </Field>
-        <Field label="Hire type">
-          <Select value={form.job_type ?? ""} onChange={(e) => set({ job_type: e.target.value })}>
-            <option>Contract</option><option>Contract-to-Hire</option><option>Direct Hire</option>
-          </Select>
-        </Field>
-        <Field label="Status">
-          <Select value={form.status} onChange={(e) => set({ status: e.target.value as JobStatus })}>
-            <option>Open</option><option>Filled</option><option>On Hold</option>
-          </Select>
-        </Field>
-        <Field label="Full job description (shown in the popup)" className="sm:col-span-2">
-          <Textarea rows={6} value={form.description ?? ""} onChange={(e) => set({ description: e.target.value })} placeholder="Paste the client's full JD: overview, what you will do, preferred quals, clearance…" />
-        </Field>
-        <Field label="Must-have qualifications (2-line preview in the table)" className="sm:col-span-2">
-          <Textarea rows={2} value={form.requirements ?? ""} onChange={(e) => set({ requirements: e.target.value })} placeholder="Experience, tools, licenses, aircraft types…" />
-        </Field>
-        <Field label="Client note (shown on the group)" className="sm:col-span-2">
-          <Input value={form.client_note ?? ""} onChange={(e) => set({ client_note: e.target.value })} placeholder="Direct hiring only · per diem · US citizenship required" />
-        </Field>
-        <Field label="Notes (shown under the role in the list)" className="sm:col-span-2">
-          <Textarea rows={2} value={form.notes ?? ""} onChange={(e) => set({ notes: e.target.value })} placeholder="Req ID, address, state min wage, shift differential, anything to remember…" />
-        </Field>
-      </div>
+      <JobFields form={form} set={set} />
     </Modal>
   );
 }
